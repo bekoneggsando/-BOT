@@ -2,23 +2,36 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
+from flask import Flask
+import threading
 
-# トークンとチャンネルIDを環境変数から取得
+# ----------------- 環境変数 -----------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 REVIEW_CHANNEL_ID = int(os.getenv("REVIEW_CHANNEL_ID"))
 
+# ----------------- Discord BOT -----------------
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# ----------------- Flask サーバ -----------------
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is alive!"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=8080)
+
+# Flaskを別スレッドで起動
+threading.Thread(target=run_flask).start()
+
 # ----------------- レビューモーダル -----------------
 class ReviewModal(discord.ui.Modal, title="レビューを書く"):
     rating = discord.ui.TextInput(
-        label="評価 (1〜5)",
-        placeholder="例: 5",
-        required=True
+        label="評価 (1〜5)", placeholder="例: 5", required=True
     )
-
     comment = discord.ui.TextInput(
         label="レビュー内容",
         style=discord.TextStyle.paragraph,
@@ -40,15 +53,11 @@ class ReviewModal(discord.ui.Modal, title="レビューを書く"):
         channel = bot.get_channel(REVIEW_CHANNEL_ID)
         if channel is None:
             await interaction.response.send_message(
-                "レビュー投稿チャンネルが見つかりません。管理者に確認してください。",
-                ephemeral=True
+                "レビュー投稿チャンネルが見つかりません。", ephemeral=True
             )
             return
 
-        embed = discord.Embed(
-            title="新しいレビュー",
-            color=discord.Color.green()
-        )
+        embed = discord.Embed(title="新しいレビュー", color=discord.Color.green())
         embed.add_field(name="評価", value="⭐" * rating_value)
         embed.add_field(name="コメント", value=self.comment.value)
         embed.set_footer(text=f"投稿者: {interaction.user}")
@@ -147,5 +156,5 @@ async def on_ready():
     await bot.tree.sync()
     print(f"ログインしました: {bot.user}")
 
-# ----------------- Bot起動 -----------------
+# ----------------- BOT起動 -----------------
 bot.run(TOKEN)
