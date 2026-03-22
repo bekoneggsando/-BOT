@@ -3,12 +3,22 @@ from discord import ui, app_commands
 from discord.ext import commands
 import random
 import os
+import asyncio
 
 # ================= 設定エリア =================
-# RailwayのVariables設定で TOKEN という名前で保存してください
-# 直接書きたい場合は os.getenv("TOKEN") を "あなたのトークン" に書き換えてください
 TOKEN = os.getenv("TOKEN")
 
+# 📢 各カテゴリーの「募集カード」を投稿するチャンネルID
+# 右側の数字を、あなたが作成したそれぞれの専用チャンネルIDに書き換えてください
+LIST_CHANNELS = {
+    "valorant": 1485178392419500122, # VALORANT募集一覧ch
+    "apex":     1485178436673736734, # Apex募集一覧ch
+    "zatsudan": 1485178502125850634, # 雑談募集一覧ch
+    "soudan":   1485178544052240514, # 悩み相談募集一覧ch
+    "friend":   1485178465643790569  # フレンド募集募集一覧ch
+}
+
+# 募集ボタンを置くチャンネル（パネル設置用）
 CH_VALORANT = 1484074198392639559
 CH_APEX     = 1484385439530876928
 CH_ZATSUDAN = 1484385781241090128
@@ -32,7 +42,7 @@ NATIVE_TOPICS = [
 class NetaView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-    @ui.button(label="話題を振る（ガチャ）", style=discord.ButtonStyle.secondary, emoji="🎲", custom_id="neta_gacha_v100")
+    @ui.button(label="話題を振る（ガチャ）", style=discord.ButtonStyle.secondary, emoji="🎲", custom_id="neta_gacha_v2")
     async def neta_button(self, it: discord.Interaction, btn: ui.Button):
         topic = random.choice(NATIVE_TOPICS)
         await it.response.send_message(content=f"🎲 {it.user.display_name}さんが話題を引きました！\n### {topic}")
@@ -40,18 +50,15 @@ class NetaView(ui.View):
 class JoinView(ui.View):
     def __init__(self, host_id, target_count, vc_ch_id, text_ch_id=None):
         super().__init__(timeout=None)
-        self.host_id = host_id
-        self.target_count = target_count
-        self.vc_ch_id = vc_ch_id
-        self.text_ch_id = text_ch_id
+        self.host_id, self.target_count = host_id, target_count
+        self.vc_ch_id, self.text_ch_id = vc_ch_id, text_ch_id
         self.joined_users = []
 
-    @ui.button(label="参加して専用部屋に入る", style=discord.ButtonStyle.success, emoji="🚪", custom_id="join_room_v100")
+    @ui.button(label="参加して専用部屋に入る", style=discord.ButtonStyle.success, emoji="🚪", custom_id="join_room_v2")
     async def join_btn(self, it: discord.Interaction, btn: ui.Button):
         if it.user.id == self.host_id or it.user.id in self.joined_users:
             return await it.response.send_message("既に参加しているか募集主です。", ephemeral=True)
         
-        # チャンネルの取得（再起動後も動くようにIDから取得）
         vc_ch = it.guild.get_channel(self.vc_ch_id)
         if vc_ch is None:
             btn.label, btn.disabled = "部屋が削除されています", True
@@ -71,9 +78,13 @@ class JoinView(ui.View):
 
         self.joined_users.append(it.user.id)
         rem = self.target_count - len(self.joined_users)
+        
         if rem <= 0:
-            btn.label, btn.disabled, btn.style = "満員", True, discord.ButtonStyle.secondary
-            await it.message.edit(view=self)
+            btn.label, btn.disabled, btn.style = "満員御礼", True, discord.ButtonStyle.secondary
+            embed = it.message.embeds[0]
+            embed.color = discord.Color.dark_gray()
+            embed.title = f"【締切】{embed.title}"
+            await it.message.edit(embed=embed, view=self)
             await it.channel.send(f"🎊 {it.user.mention}さんが参加して**満員**になりました！")
         else:
             await it.channel.send(f"✅ {it.user.mention}さんが参加！ (あと **{rem}** 人)")
@@ -86,20 +97,19 @@ class MultiRecruitModal(ui.Modal):
         self.count_input = ui.TextInput(label="1. 募集人数 (数字)", placeholder="例: 2", min_length=1, max_length=1)
         self.add_item(self.count_input)
 
-        # カテゴリー別項目
         if mode == "valorant":
             self.add_item(ui.TextInput(label="2. 自分のランク", placeholder="例：ゴールド2", max_length=20))
             self.add_item(ui.TextInput(label="3. モード / サーバー", placeholder="例：コンペ / 東京", max_length=30))
-            self.add_item(ui.TextInput(label="4. 相手への希望条件", placeholder="例：シルバー〜プラチナ", max_length=100))
+            self.add_item(ui.TextInput(label="4. 相手への条件", placeholder="例：シルバー〜プラチナ", max_length=100))
             self.add_item(ui.TextInput(label="5. 雰囲気・一言", style=discord.TextStyle.paragraph))
         elif mode == "apex":
             self.add_item(ui.TextInput(label="2. 自分のランク / Lv", placeholder="例：プラチナ", max_length=50))
             self.add_item(ui.TextInput(label="3. 目的 / モード", placeholder="例：カジュアル", max_length=30))
             self.add_item(ui.TextInput(label="4. 相手への希望条件", max_length=100))
-            self.add_item(ui.TextInput(label="5. VC・雰囲気", style=discord.TextStyle.paragraph))
+            self.add_item(ui.TextInput(label="5. VC・スタイル", style=discord.TextStyle.paragraph))
         elif mode == "zatsudan":
-            self.add_item(ui.TextInput(label="2. 話題", max_length=50))
-            self.add_item(ui.TextInput(label="3. 通話時間", max_length=30))
+            self.add_item(ui.TextInput(label="2. 今の話題", max_length=50))
+            self.add_item(ui.TextInput(label="3. 活動期限", max_length=30))
             self.add_item(ui.TextInput(label="4. 相手の雰囲気", max_length=100))
             self.add_item(ui.TextInput(label="5. 備考・スタイル", style=discord.TextStyle.paragraph))
         elif mode == "soudan":
@@ -110,7 +120,7 @@ class MultiRecruitModal(ui.Modal):
         elif mode == "friend":
             self.add_item(ui.TextInput(label="2. メインの趣味", max_length=50))
             self.add_item(ui.TextInput(label="3. 活動時間帯", max_length=30))
-            self.add_item(ui.TextInput(label="4. やりたいゲーム", max_length=100))
+            self.add_item(ui.TextInput(label="4. 自分の雰囲気", max_length=100))
             self.add_item(ui.TextInput(label="5. どんな友達になりたいか", style=discord.TextStyle.paragraph))
 
     async def on_submit(self, it: discord.Interaction):
@@ -127,10 +137,14 @@ class MultiRecruitModal(ui.Modal):
         vc_ch = await guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
         text_ch = await guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over) if self.mode == "friend" else None
 
-        # 作成された部屋に話題ボタンを投稿
+        # 部屋に話題ガチャを投稿
         target_post = text_ch if text_ch else vc_ch
         if self.mode in ["zatsudan", "friend"]:
             await target_post.send(embed=discord.Embed(title="🚀 会話サポート", description="話題に困ったらボタンを押してね！"), view=NetaView())
+
+        # カテゴリーに応じた「募集一覧」投稿先を取得
+        target_list_id = LIST_CHANNELS.get(self.mode)
+        list_ch = guild.get_channel(target_list_id) if target_list_id else it.channel
 
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
         embed = discord.Embed(title=f"【{self.title}】詳細募集", color=colors.get(self.mode, 0x95a5a6))
@@ -143,15 +157,14 @@ class MultiRecruitModal(ui.Modal):
             if item != self.count_input and item.value:
                 embed.add_field(name=f"🔘 {item.label[3:]}", value=item.value, inline=False)
         
-        # IDを渡すように変更（再起動対策）
         view = JoinView(host_id=it.user.id, target_count=target_count, vc_ch_id=vc_ch.id, text_ch_id=text_ch.id if text_ch else None)
-        await it.channel.send(content=f"📢 {it.user.mention}さんが募集中！", embed=embed, view=view)
-        await it.followup.send("募集を開始しました！", ephemeral=True)
+        await list_ch.send(content=f"📢 {it.user.mention}さんが新しい募集を開始しました！", embed=embed, view=view)
+        await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
 
 class UniversalPanelView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-    @ui.button(label="📝 条件を指定して募集", style=discord.ButtonStyle.primary, custom_id="panel_start_v100")
+    @ui.button(label="📝 条件を指定して募集", style=discord.ButtonStyle.primary, custom_id="panel_start_v2")
     async def start_btn(self, it: discord.Interaction, btn: ui.Button):
         cid = it.channel_id
         conf = {CH_VALORANT: ("valorant", "VALORANT詳細募集"), CH_APEX: ("apex", "Apex詳細募集"),
@@ -163,14 +176,25 @@ class UniversalPanelView(ui.View):
 class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.members = intents.message_content = True
+        intents.members = intents.message_content = intents.voice_states = True
         super().__init__(command_prefix="!", intents=intents)
+    
     async def setup_hook(self):
         self.add_view(UniversalPanelView())
         self.add_view(NetaView())
-        # 注意：JoinViewは動的に作成されるため、ここでの登録は不要ですが
-        # 永続化したい場合は別途処理が必要です。通常はこれで動きます。
         await self.tree.sync()
+
+    # VC自動削除（空になってから60秒後に削除）
+    async def on_voice_state_update(self, member, before, after):
+        if before.channel and len(before.channel.members) == 0:
+            if before.channel.name.startswith("🔊-"):
+                await asyncio.sleep(60)
+                if len(before.channel.members) == 0:
+                    txt_name = before.channel.name.replace("🔊-", "💬-")
+                    for ch in member.guild.text_channels:
+                        if ch.name == txt_name: await ch.delete()
+                    try: await before.channel.delete()
+                    except: pass
 
 bot = MyBot()
 
@@ -180,7 +204,4 @@ async def setup(it: discord.Interaction):
     await it.response.send_message("募集パネルを設置しました！", view=UniversalPanelView())
 
 if __name__ == "__main__":
-    if TOKEN:
-        bot.run(TOKEN)
-    else:
-        print("エラー: TOKENが設定されていません。")
+    if TOKEN: bot.run(TOKEN)
