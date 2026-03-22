@@ -90,16 +90,16 @@ class MultiRecruitModal(ui.Modal):
         if mode == "valorant":
             self.add_item(ui.TextInput(label="2. 自分のランク", placeholder="例：ゴールド2", max_length=20))
             self.add_item(ui.TextInput(label="3. モード / サーバー", placeholder="例：コンペ / 東京", max_length=30))
-            self.add_item(ui.TextInput(label="4. 相手への条件", placeholder="例：シルバー〜プラチナ", max_length=100))
+            self.add_item(ui.TextInput(label="4. 相手への希望条件", placeholder="例：シルバー〜プラチナ", max_length=100))
             self.add_item(ui.TextInput(label="5. 雰囲気・一言", style=discord.TextStyle.paragraph))
         elif mode == "apex":
             self.add_item(ui.TextInput(label="2. 自分のランク / Lv", placeholder="例：プラチナ", max_length=50))
             self.add_item(ui.TextInput(label="3. 目的 / モード", placeholder="例：カジュアル", max_length=30))
             self.add_item(ui.TextInput(label="4. 相手への希望条件", max_length=100))
-            self.add_item(ui.TextInput(label="5. VC・スタイル", style=discord.TextStyle.paragraph))
+            self.add_item(ui.TextInput(label="5. VC・雰囲気", style=discord.TextStyle.paragraph))
         elif mode == "zatsudan":
-            self.add_item(ui.TextInput(label="2. 今の話題", max_length=50))
-            self.add_item(ui.TextInput(label="3. 活動期限", max_length=30))
+            self.add_item(ui.TextInput(label="2. 話題", max_length=50))
+            self.add_item(ui.TextInput(label="3. 通話時間", max_length=30))
             self.add_item(ui.TextInput(label="4. 相手の雰囲気", max_length=100))
             self.add_item(ui.TextInput(label="5. 備考・スタイル", style=discord.TextStyle.paragraph))
         elif mode == "soudan":
@@ -110,7 +110,7 @@ class MultiRecruitModal(ui.Modal):
         elif mode == "friend":
             self.add_item(ui.TextInput(label="2. メインの趣味", max_length=50))
             self.add_item(ui.TextInput(label="3. 活動時間帯", max_length=30))
-            self.add_item(ui.TextInput(label="4. 自分の雰囲気", max_length=100))
+            self.add_item(ui.TextInput(label="4. やりたいゲーム", max_length=100))
             self.add_item(ui.TextInput(label="5. どんな友達になりたいか", style=discord.TextStyle.paragraph))
 
     async def on_submit(self, it: discord.Interaction):
