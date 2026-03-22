@@ -1,160 +1,186 @@
 import discord
+from discord import ui, app_commands
 from discord.ext import commands
-from discord import app_commands
+import random
 import os
-from flask import Flask
-import threading
 
-# ----------------- 環境変数 -----------------
-TOKEN = os.getenv("DISCORD_TOKEN")
-REVIEW_CHANNEL_ID = int(os.getenv("REVIEW_CHANNEL_ID"))
+# ================= 設定エリア =================
+# RailwayのVariables設定で TOKEN という名前で保存してください
+# 直接書きたい場合は os.getenv("TOKEN") を "あなたのトークン" に書き換えてください
+TOKEN = os.getenv("TOKEN")
 
-# ----------------- Discord BOT -----------------
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+CH_VALORANT = 1484074198392639559
+CH_APEX     = 1484385439530876928
+CH_ZATSUDAN = 1484385781241090128
+CH_SOUDAN   = 1484386174394040431
+CH_FRIEND   = 1484117154910699530
 
-# ----------------- Flask サーバ -----------------
-app = Flask(__name__)
+NATIVE_TOPICS = [
+    "最近ハマっている食べ物や飲み物は？ 🍕",
+    "一番好きなゲームのタイトルとその魅力を教えて！ 🎮",
+    "最近見たアニメや映画でおすすめはある？ 🎬",
+    "もし100万円あったら何に使う？ 💰",
+    "自分の性格を一言で表すと？ 😊",
+    "休みの日はインドア派？アウトドア派？ 🏠🌳",
+    "最近買って良かったアイテムは？ 🛒",
+    "今一番行きたい場所はどこ？ 🗺️",
+    "好きなアーティストや曲を教えて！ 🎧",
+    "学生時代の部活は何をしていた？ 🏆"
+]
+# =============================================
 
-@app.route("/")
-def home():
-    return "Bot is alive!"
+class NetaView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    @ui.button(label="話題を振る（ガチャ）", style=discord.ButtonStyle.secondary, emoji="🎲", custom_id="neta_gacha_v100")
+    async def neta_button(self, it: discord.Interaction, btn: ui.Button):
+        topic = random.choice(NATIVE_TOPICS)
+        await it.response.send_message(content=f"🎲 {it.user.display_name}さんが話題を引きました！\n### {topic}")
 
-def run_flask():
-    app.run(host="0.0.0.0", port=8080)
+class JoinView(ui.View):
+    def __init__(self, host_id, target_count, vc_ch_id, text_ch_id=None):
+        super().__init__(timeout=None)
+        self.host_id = host_id
+        self.target_count = target_count
+        self.vc_ch_id = vc_ch_id
+        self.text_ch_id = text_ch_id
+        self.joined_users = []
 
-# Flaskを別スレッドで起動
-threading.Thread(target=run_flask).start()
+    @ui.button(label="参加して専用部屋に入る", style=discord.ButtonStyle.success, emoji="🚪", custom_id="join_room_v100")
+    async def join_btn(self, it: discord.Interaction, btn: ui.Button):
+        if it.user.id == self.host_id or it.user.id in self.joined_users:
+            return await it.response.send_message("既に参加しているか募集主です。", ephemeral=True)
+        
+        # チャンネルの取得（再起動後も動くようにIDから取得）
+        vc_ch = it.guild.get_channel(self.vc_ch_id)
+        if vc_ch is None:
+            btn.label, btn.disabled = "部屋が削除されています", True
+            await it.message.edit(view=self)
+            return await it.response.send_message("この募集の専用部屋は既に削除されています。", ephemeral=True)
 
-# ----------------- レビューモーダル -----------------
-class ReviewModal(discord.ui.Modal, title="レビューを書く"):
-    rating = discord.ui.TextInput(
-        label="評価 (1〜5)", placeholder="例: 5", required=True
-    )
-    comment = discord.ui.TextInput(
-        label="レビュー内容",
-        style=discord.TextStyle.paragraph,
-        placeholder="取引の感想を書いてください",
-        required=True
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
+        await it.response.defer(ephemeral=True)
+        overwrite = discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True)
+        
         try:
-            rating_value = int(self.rating.value)
-            if rating_value < 1 or rating_value > 5:
-                raise ValueError
+            await vc_ch.set_permissions(it.user, overwrite=overwrite)
+            if self.text_ch_id:
+                text_ch = it.guild.get_channel(self.text_ch_id)
+                if text_ch: await text_ch.set_permissions(it.user, overwrite=overwrite)
         except:
-            await interaction.response.send_message(
-                "評価は1〜5の数字で入力してください", ephemeral=True
-            )
-            return
+            pass
 
-        channel = bot.get_channel(REVIEW_CHANNEL_ID)
-        if channel is None:
-            await interaction.response.send_message(
-                "レビュー投稿チャンネルが見つかりません。", ephemeral=True
-            )
-            return
+        self.joined_users.append(it.user.id)
+        rem = self.target_count - len(self.joined_users)
+        if rem <= 0:
+            btn.label, btn.disabled, btn.style = "満員", True, discord.ButtonStyle.secondary
+            await it.message.edit(view=self)
+            await it.channel.send(f"🎊 {it.user.mention}さんが参加して**満員**になりました！")
+        else:
+            await it.channel.send(f"✅ {it.user.mention}さんが参加！ (あと **{rem}** 人)")
+        await it.followup.send(f"参加完了！{vc_ch.mention} に入れます。", ephemeral=True)
 
-        embed = discord.Embed(title="新しいレビュー", color=discord.Color.green())
-        embed.add_field(name="評価", value="⭐" * rating_value)
-        embed.add_field(name="コメント", value=self.comment.value)
-        embed.set_footer(text=f"投稿者: {interaction.user}")
+class MultiRecruitModal(ui.Modal):
+    def __init__(self, mode, title):
+        super().__init__(title=title)
+        self.mode = mode
+        self.count_input = ui.TextInput(label="1. 募集人数 (数字)", placeholder="例: 2", min_length=1, max_length=1)
+        self.add_item(self.count_input)
 
-        try:
-            await channel.send(embed=embed)
-            await interaction.response.send_message("レビューを投稿しました！", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.response.send_message(
-                "BOTにチャンネル送信権限がありません。", ephemeral=True
-            )
-        except Exception as e:
-            await interaction.response.send_message(
-                f"レビュー投稿中にエラーが発生しました: {e}", ephemeral=True
-            )
+        # カテゴリー別項目
+        if mode == "valorant":
+            self.add_item(ui.TextInput(label="2. 自分のランク", placeholder="例：ゴールド2", max_length=20))
+            self.add_item(ui.TextInput(label="3. モード / サーバー", placeholder="例：コンペ / 東京", max_length=30))
+            self.add_item(ui.TextInput(label="4. 相手への条件", placeholder="例：シルバー〜プラチナ", max_length=100))
+            self.add_item(ui.TextInput(label="5. 雰囲気・一言", style=discord.TextStyle.paragraph))
+        elif mode == "apex":
+            self.add_item(ui.TextInput(label="2. 自分のランク / Lv", placeholder="例：プラチナ", max_length=50))
+            self.add_item(ui.TextInput(label="3. 目的 / モード", placeholder="例：カジュアル", max_length=30))
+            self.add_item(ui.TextInput(label="4. 相手への希望条件", max_length=100))
+            self.add_item(ui.TextInput(label="5. VC・スタイル", style=discord.TextStyle.paragraph))
+        elif mode == "zatsudan":
+            self.add_item(ui.TextInput(label="2. 今の話題", max_length=50))
+            self.add_item(ui.TextInput(label="3. 活動期限", max_length=30))
+            self.add_item(ui.TextInput(label="4. 相手の雰囲気", max_length=100))
+            self.add_item(ui.TextInput(label="5. 備考・スタイル", style=discord.TextStyle.paragraph))
+        elif mode == "soudan":
+            self.add_item(ui.TextInput(label="2. 相談のジャンル", max_length=50))
+            self.add_item(ui.TextInput(label="3. 相談の重さ", max_length=30))
+            self.add_item(ui.TextInput(label="4. 相手への希望", required=False))
+            self.add_item(ui.TextInput(label="5. 接し方の希望", style=discord.TextStyle.paragraph))
+        elif mode == "friend":
+            self.add_item(ui.TextInput(label="2. メインの趣味", max_length=50))
+            self.add_item(ui.TextInput(label="3. 活動時間帯", max_length=30))
+            self.add_item(ui.TextInput(label="4. 自分の雰囲気", max_length=100))
+            self.add_item(ui.TextInput(label="5. どんな友達になりたいか", style=discord.TextStyle.paragraph))
 
-# ----------------- ボタン -----------------
-class ReviewButton(discord.ui.View):
-    @discord.ui.button(label="レビューを書く", style=discord.ButtonStyle.green)
-    async def review(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(ReviewModal())
+    async def on_submit(self, it: discord.Interaction):
+        if not self.count_input.value.isdigit():
+            return await it.response.send_message("人数は数字で入力してください。", ephemeral=True)
+        
+        target_count = int(self.count_input.value)
+        await it.response.defer(ephemeral=True)
+        guild = it.guild
+        over = {guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
+                guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)}
 
-# ----------------- /finish -----------------
-@bot.tree.command(name="finish", description="取引を終了してレビューを書く")
-async def finish(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        "取引が終了しました。レビューを書いてください👇",
-        view=ReviewButton()
-    )
+        vc_ch = await guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
+        text_ch = await guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over) if self.mode == "friend" else None
 
-# ----------------- /server-rate -----------------
-@bot.tree.command(name="server-rate", description="サーバーの平均評価を表示")
-async def server_rate(interaction: discord.Interaction):
-    channel = bot.get_channel(REVIEW_CHANNEL_ID)
-    if channel is None:
-        await interaction.response.send_message(
-            "レビュー投稿チャンネルが見つかりません。", ephemeral=True
-        )
-        return
+        # 作成された部屋に話題ボタンを投稿
+        target_post = text_ch if text_ch else vc_ch
+        if self.mode in ["zatsudan", "friend"]:
+            await target_post.send(embed=discord.Embed(title="🚀 会話サポート", description="話題に困ったらボタンを押してね！"), view=NetaView())
 
-    messages = [msg async for msg in channel.history(limit=None)]
-    total, count = 0, 0
+        colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
+        embed = discord.Embed(title=f"【{self.title}】詳細募集", color=colors.get(self.mode, 0x95a5a6))
+        embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
+        embed.add_field(name="👥 人数", value=f"あと **{target_count}** 人", inline=True)
+        embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
+        if text_ch: embed.add_field(name="💬 専用チャット", value=text_ch.mention, inline=True)
 
-    for msg in messages:
-        if not msg.embeds:
-            continue
-        embed = msg.embeds[0]
-        rating_field = embed.fields[0].value
-        total += rating_field.count("⭐")
-        count += 1
+        for item in self.children:
+            if item != self.count_input and item.value:
+                embed.add_field(name=f"🔘 {item.label[3:]}", value=item.value, inline=False)
+        
+        # IDを渡すように変更（再起動対策）
+        view = JoinView(host_id=it.user.id, target_count=target_count, vc_ch_id=vc_ch.id, text_ch_id=text_ch.id if text_ch else None)
+        await it.channel.send(content=f"📢 {it.user.mention}さんが募集中！", embed=embed, view=view)
+        await it.followup.send("募集を開始しました！", ephemeral=True)
 
-    if count == 0:
-        await interaction.response.send_message("レビューはまだありません。", ephemeral=True)
-        return
+class UniversalPanelView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    @ui.button(label="📝 条件を指定して募集", style=discord.ButtonStyle.primary, custom_id="panel_start_v100")
+    async def start_btn(self, it: discord.Interaction, btn: ui.Button):
+        cid = it.channel_id
+        conf = {CH_VALORANT: ("valorant", "VALORANT詳細募集"), CH_APEX: ("apex", "Apex詳細募集"),
+                CH_ZATSUDAN: ("zatsudan", "雑談・暇つぶし"), CH_SOUDAN: ("soudan", "悩み相談"), CH_FRIEND: ("friend", "フレンド募集")}
+        res = conf.get(cid)
+        if res: await it.response.send_modal(MultiRecruitModal(res[0], res[1]))
+        else: await it.response.send_message("募集対象外のチャンネルです。", ephemeral=True)
 
-    avg = total / count
-    await interaction.response.send_message(f"⭐ サーバー平均評価\n平均: {avg:.2f} ⭐\nレビュー数: {count} 件")
+class MyBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.members = intents.message_content = True
+        super().__init__(command_prefix="!", intents=intents)
+    async def setup_hook(self):
+        self.add_view(UniversalPanelView())
+        self.add_view(NetaView())
+        # 注意：JoinViewは動的に作成されるため、ここでの登録は不要ですが
+        # 永続化したい場合は別途処理が必要です。通常はこれで動きます。
+        await self.tree.sync()
 
-# ----------------- /review-star -----------------
-@bot.tree.command(name="review-star", description="指定の星評価のレビュー一覧を表示")
-@app_commands.describe(star="1〜5の評価を入力")
-async def review_star(interaction: discord.Interaction, star: int):
-    if star < 1 or star > 5:
-        await interaction.response.send_message("1〜5の評価を指定してください。", ephemeral=True)
-        return
+bot = MyBot()
 
-    channel = bot.get_channel(REVIEW_CHANNEL_ID)
-    if channel is None:
-        await interaction.response.send_message(
-            "レビュー投稿チャンネルが見つかりません。", ephemeral=True
-        )
-        return
+@bot.tree.command(name="setup")
+@app_commands.checks.has_permissions(administrator=True)
+async def setup(it: discord.Interaction):
+    await it.response.send_message("募集パネルを設置しました！", view=UniversalPanelView())
 
-    messages = [msg async for msg in channel.history(limit=None)]
-    reviews = []
-
-    for msg in messages:
-        if not msg.embeds:
-            continue
-        embed = msg.embeds[0]
-        rating = embed.fields[0].value.count("⭐")
-        if rating == star:
-            comment = embed.fields[1].value
-            footer = embed.footer.text
-            reviews.append(f"・コメント: {comment}\n  {footer}")
-
-    if not reviews:
-        await interaction.response.send_message(f"⭐{star} のレビューはまだありません。", ephemeral=True)
-        return
-
-    await interaction.response.send_message(f"⭐{star} レビュー一覧\n" + "\n\n".join(reviews))
-
-# ----------------- on_ready -----------------
-@bot.event
-async def on_ready():
-    await bot.tree.sync()
-    print(f"ログインしました: {bot.user}")
-
-# ----------------- BOT起動 -----------------
-bot.run(TOKEN)
+if __name__ == "__main__":
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("エラー: TOKENが設定されていません。")
