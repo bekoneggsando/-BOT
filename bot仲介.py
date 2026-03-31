@@ -208,6 +208,8 @@ class MultiRecruitModal(ui.Modal):
         # タイマーを開始
         bot.loop.create_task(auto_close_timer())
 
+user_sleep_settings = {}
+
 class SleepTimeSelectView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
