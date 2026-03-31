@@ -70,14 +70,15 @@ class NetaView(ui.View):
         await it.response.send_message(content=f"🎲 {it.user.display_name}さんが話題を引きました！\n### {topic}")
 
 class JoinView(ui.View):
-    def __init__(self, host_id, target_count, vc_ch_id, text_ch_id=None):
+    def __init__(self, host_id, target_count, vc_ch_id, limit_minutes, text_ch_id=None):
         super().__init__(timeout=None)
         self.host_id = host_id
         self.target_count = target_count
         self.vc_ch_id = vc_ch_id
         self.text_ch_id = text_ch_id
-        self.joined_users = []  # 参加者のリスト
-
+        self.joined_users = []
+        # --- 👇 ここを追加：残り時間を秒で管理 ---
+        self.remaining_seconds = limit_minutes * 60
     # --- 2. 参加・キャンセルボタン ---
     @ui.button(label="参加する / キャンセル", style=discord.ButtonStyle.success, emoji="✋", custom_id="join_or_cancel")
     # 参加ボタンの中身（Embed更新部分）を少しだけ賢くしました
@@ -130,9 +131,17 @@ class JoinView(ui.View):
         if it.user.id != self.host_id:
             return await it.response.send_message("募集主しか延長できません。", ephemeral=True)
         
-        # ここでは簡易的にメッセージだけ送ります。
-        # 実際の削除タスク（Task）をいじっている場合は、そちらの時間をリセットする処理が必要です。
-        await it.response.send_message("⏳ 締切時間を10分延長しました（ということにします）。", ephemeral=True)
+        # 実際に内部の秒数を増やす！
+        self.remaining_seconds += 600
+        
+        # Embedの表示も更新して安心させる
+        embed = it.message.embeds[0]
+        # 3番目のフィールド「⌛ 締切」を更新（indexは作成順に合わせて調整してください）
+        # もし「10分後に消去」という表示なら、そこを書き換えます
+        embed.set_field_at(2, name="⌛ 締切", value="延長されました！", inline=True)
+        
+        await it.message.edit(embed=embed)
+        await it.response.send_message("⏳ 締切を10分延長しました！", ephemeral=True)
 
     # --- 1. 手動終了ボタン ---
     @ui.button(label="募集を終了", style=discord.ButtonStyle.danger, emoji="✖️", custom_id="stop_recruit")
