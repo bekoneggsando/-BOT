@@ -244,8 +244,8 @@ class MyBot(commands.Bot):
     async def setup_hook(self):
         self.add_view(UniversalPanelView())
         self.add_view(NetaView())
+        self.add_view(NotificationView()) # 👈 これを付け加える！
         await self.tree.sync()
-
     # VC自動削除（空になってから60秒後に削除）
     async def on_voice_state_update(self, member, before, after):
         if before.channel and len(before.channel.members) == 0:
@@ -259,6 +259,16 @@ class MyBot(commands.Bot):
                     except: pass
 
 bot = MyBot()
+
+@bot.command(name="role_panel")
+@commands.has_permissions(administrator=True)
+async def role_panel(ctx):
+    embed = discord.Embed(
+        title="🔔 募集通知設定",
+        description="新しい募集が投稿されたときに通知を受け取りたいカテゴリーを選んでください。\nボタンをもう一度押すと通知をオフにできます。",
+        color=0x2ecc71
+    )
+    await ctx.send(embed=embed, view=NotificationView())
 
 @bot.tree.command(name="setup")
 @app_commands.checks.has_permissions(administrator=True)
