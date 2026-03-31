@@ -243,21 +243,9 @@ class SleepTimeSelectView(ui.View):
         await it.response.send_message("✅ 通知オフ設定を解除しました！いつでも通知が届きます。", ephemeral=True)
 
 class NotificationView(ui.View):
-    # ...（これまでの toggle_role や各ボタンのコード）...
-
-    # 最後にこのボタンを追加
-    @ui.button(label="🌙 通知オフ時間の詳細設定", style=discord.ButtonStyle.secondary, emoji="🕒", custom_id="open_sleep_panel")
-    async def open_sleep(self, it: discord.Interaction, btn: ui.Button):
-        embed = discord.Embed(
-            title="🌙 おやすみモード（通知オフ）設定",
-            description=(
-                "寝ている間や仕事中など、通知を受け取りたくない時間帯を指定できます。\n\n"
-                "**下のメニューから開始時間と終了時間を選んでください。**"
-            ),
-            color=0x34495e
-        )
-        # このユーザーにだけ見えるようにパネルを出す
-        await it.response.send_message(embed=embed, view=SleepTimeSelectView(), ephemeral=True)
+    def __init__(self):
+        # タイムアウトを None にしないと add_view でエラーになります
+        super().__init__(timeout=None)
 
     async def toggle_role(self, it: discord.Interaction, key: str):
         role_id = ROLE_IDS.get(key)
@@ -270,7 +258,7 @@ class NotificationView(ui.View):
             await it.response.send_message(f"🔕 {role.name} 通知を【オフ】にしました。", ephemeral=True)
         else:
             await it.user.add_roles(role)
-            await it.response.send_message(f"🔔 {role.name} 通知を【オン】にしました！募集時に通知が届きます。", ephemeral=True)
+            await it.response.send_message(f"🔔 {role.name} 通知を【オン】にしました！", ephemeral=True)
 
     @ui.button(label="VALORANT通知", style=discord.ButtonStyle.primary, emoji="🎮", custom_id="role_val")
     async def val_role(self, it: discord.Interaction, btn: ui.Button):
@@ -287,6 +275,20 @@ class NotificationView(ui.View):
     @ui.button(label="悩み相談通知", style=discord.ButtonStyle.success, emoji="🔰", custom_id="role_soudan")
     async def soudan_role(self, it: discord.Interaction, btn: ui.Button):
         await self.toggle_role(it, "soudan")
+        
+    @ui.button(label="フレンド募集通知", style=discord.ButtonStyle.secondary, emoji="🤝", custom_id="role_friend")
+    async def friend_role(self, it: discord.Interaction, btn: ui.Button):
+        await self.toggle_role(it, "friend")
+
+    # 🌙 ここに custom_id="open_sleep_panel" を追加しました
+    @ui.button(label="🌙 通知オフ時間の詳細設定", style=discord.ButtonStyle.secondary, emoji="🕒", custom_id="open_sleep_panel")
+    async def open_sleep(self, it: discord.Interaction, btn: ui.Button):
+        embed = discord.Embed(
+            title="🌙 おやすみモード（通知オフ）設定",
+            description="通知を受け取りたくない時間帯を指定できます。\n下のメニューから時間を選んでください。",
+            color=0x34495e
+        )
+        await it.response.send_message(embed=embed, view=SleepTimeSelectView(), ephemeral=True)
 
 class UniversalPanelView(ui.View):
     def __init__(self):
