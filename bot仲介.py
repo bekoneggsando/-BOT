@@ -274,10 +274,18 @@ class SleepTimeSelectView(ui.View):
         user_sleep_settings[user_id] = (start, end_time)
         await it.response.send_message(f"✅ **{end_time}時**に通知を再開するようにしました。", ephemeral=True)
 
-    @ui.button(label="設定をリセット（24時間通知を受け取る）", style=discord.ButtonStyle.danger, custom_id="sleep_reset")
-    async def reset(self, it: discord.Interaction, btn: ui.Button):
-        user_sleep_settings.pop(it.user.id, None)
-        await it.response.send_message("✅ 通知オフ設定を解除しました！いつでも通知が届きます。", ephemeral=True)
+    @ui.button(label="🕒 通知を受け取る時間の設定", style=discord.ButtonStyle.secondary, emoji="⏰", custom_id="open_time_panel")
+    async def open_time(self, it: discord.Interaction, btn: ui.Button):
+        embed = discord.Embed(
+            title="⏰ 活動時間（通知OK時間）の設定",
+            description=(
+                "自分が募集通知を受け取っても良い時間を選んでください。\n"
+                "ここで選んだ時間のロールが自動的に付与されます。\n\n"
+                "**※選ばなかった時間のロールは自動で外れます。**"
+            ),
+            color=0x34495e
+        )
+        await it.response.send_message(embed=embed, view=TimeRoleSelectView(), ephemeral=True)
 
 class NotificationView(ui.View):
     def __init__(self):
@@ -346,13 +354,10 @@ class MyBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
     
     async def setup_hook(self):
-        # ✅ これらはチャンネルにずっと残るパネルなので add_view が必要
         self.add_view(UniversalPanelView())
         self.add_view(NetaView())
-        self.add_view(NotificationView()) 
-        
-        # ❌ ここにあった self.add_view(SleepTimeSelectView()) を削除！
-        
+        self.add_view(NotificationView())
+        # TimeRoleSelectView は「その場出し」なので add_view は不要です
         await self.tree.sync()
         
     # VC自動削除（空になってから60秒後に削除）
