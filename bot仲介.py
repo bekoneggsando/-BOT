@@ -309,10 +309,13 @@ class MyBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
     
     async def setup_hook(self):
+        # ✅ これらはチャンネルにずっと残るパネルなので add_view が必要
         self.add_view(UniversalPanelView())
         self.add_view(NetaView())
         self.add_view(NotificationView()) 
-        self.add_view(SleepTimeSelectView()) # 👈 これを追加
+        
+        # ❌ ここにあった self.add_view(SleepTimeSelectView()) を削除！
+        
         await self.tree.sync()
         
     # VC自動削除（空になってから60秒後に削除）
