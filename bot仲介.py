@@ -257,7 +257,14 @@ class MultiRecruitModal(ui.Modal):
                     mention_text = "" 
         # --- 👆 ここまで 👆 ---
 
-        view = JoinView(host_id=it.user.id, target_count=target_count, vc_ch_id=vc_ch.id, text_ch_id=text_ch.id if text_ch else None)
+        # --- 👇 修正：limit_minutes を View に渡すように変更 ---
+        view = JoinView(
+            host_id=it.user.id, 
+            target_count=target_count, 
+            vc_ch_id=vc_ch.id, 
+            limit_minutes=limit_minutes, # これを追加
+            text_ch_id=text_ch.id if text_ch else None
+        )
         
         # 募集メッセージ送信
         list_ch_msg = await list_ch.send(
@@ -265,7 +272,39 @@ class MultiRecruitModal(ui.Modal):
             embed=embed,
             view=view
         )
-        await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！\n{limit_minutes}分間、誰も参加しなければ自動で削除されます。", ephemeral=True)
+        
+        await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！\n設定した時間が経過するか、手動で終了すると部屋は消去されます。", ephemeral=True)
+
+        # --- 🕒 本気の延長対応・自動消去ループ ---
+        # view.remaining_seconds が 0 になるまで 10秒おきに監視し続ける
+        import asyncio
+        while view.remaining_seconds > 0:
+            await asyncio.sleep(10)
+            view.remaining_seconds -= 10
+            
+            # 手動終了ボタンなどでメッセージが消えていた場合はループ終了
+            try:
+                # メッセージがまだ存在するかチェック
+                await list_ch_msg.edit() 
+            except:
+                break
+
+        # --- 🧹 自動消去の実行 ---
+        try:
+            # 募集メッセージの削除
+            await list_ch_msg.delete()
+        except:
+            pass
+            
+        try:
+            # VCの削除
+            await vc_ch.delete()
+            # テキストチャンネルがあれば削除
+            if text_ch:
+                await text_ch.delete()
+        except:
+            # すでに削除されている場合は何もしない
+            pass
 
         # --- 🕒 自動締切タイマー（バックグラウンドで実行） ---
         async def auto_close_timer():
