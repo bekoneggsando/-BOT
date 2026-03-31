@@ -4,7 +4,8 @@ from discord.ext import commands
 import random
 import os
 import asyncio
-
+import pytz
+from datetime import datetime
 # ================= 設定エリア =================
 TOKEN = os.getenv("TOKEN")
 
