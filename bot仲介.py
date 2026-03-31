@@ -189,6 +189,40 @@ class MultiRecruitModal(ui.Modal):
         # --- 👆 ここまで 👆 ---
 
         await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
+
+class NotificationView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def toggle_role(self, it: discord.Interaction, key: str):
+        role_id = ROLE_IDS.get(key)
+        role = it.guild.get_role(role_id)
+        if not role:
+            return await it.response.send_message("ロールが見つかりません。設定を確認してください。", ephemeral=True)
+
+        if role in it.user.roles:
+            await it.user.remove_roles(role)
+            await it.response.send_message(f"🔕 {role.name} 通知を【オフ】にしました。", ephemeral=True)
+        else:
+            await it.user.add_roles(role)
+            await it.response.send_message(f"🔔 {role.name} 通知を【オン】にしました！", ephemeral=True)
+
+    @ui.button(label="VALORANT通知", style=discord.ButtonStyle.primary, emoji="🎮", custom_id="role_val")
+    async def val_role(self, it: discord.Interaction, btn: ui.Button):
+        await self.toggle_role(it, "valorant")
+
+    @ui.button(label="Apex通知", style=discord.ButtonStyle.primary, emoji="🔫", custom_id="role_apex")
+    async def apex_role(self, it: discord.Interaction, btn: ui.Button):
+        await self.toggle_role(it, "apex")
+
+    @ui.button(label="雑談通知", style=discord.ButtonStyle.success, emoji="💬", custom_id="role_zatsudan")
+    async def zatsudan_role(self, it: discord.Interaction, btn: ui.Button):
+        await self.toggle_role(it, "zatsudan")
+
+    @ui.button(label="悩み相談通知", style=discord.ButtonStyle.success, emoji="🔰", custom_id="role_soudan")
+    async def soudan_role(self, it: discord.Interaction, btn: ui.Button):
+        await self.toggle_role(it, "soudan")
+
 class UniversalPanelView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
