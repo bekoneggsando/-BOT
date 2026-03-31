@@ -243,8 +243,21 @@ class SleepTimeSelectView(ui.View):
         await it.response.send_message("✅ 通知オフ設定を解除しました！いつでも通知が届きます。", ephemeral=True)
 
 class NotificationView(ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+    # ...（これまでの toggle_role や各ボタンのコード）...
+
+    # 最後にこのボタンを追加
+    @ui.button(label="🌙 通知オフ時間の詳細設定", style=discord.ButtonStyle.secondary, emoji="🕒", custom_id="open_sleep_panel")
+    async def open_sleep(self, it: discord.Interaction, btn: ui.Button):
+        embed = discord.Embed(
+            title="🌙 おやすみモード（通知オフ）設定",
+            description=(
+                "寝ている間や仕事中など、通知を受け取りたくない時間帯を指定できます。\n\n"
+                "**下のメニューから開始時間と終了時間を選んでください。**"
+            ),
+            color=0x34495e
+        )
+        # このユーザーにだけ見えるようにパネルを出す
+        await it.response.send_message(embed=embed, view=SleepTimeSelectView(), ephemeral=True)
 
     async def toggle_role(self, it: discord.Interaction, key: str):
         role_id = ROLE_IDS.get(key)
@@ -296,7 +309,8 @@ class MyBot(commands.Bot):
     async def setup_hook(self):
         self.add_view(UniversalPanelView())
         self.add_view(NetaView())
-        self.add_view(NotificationView()) # 👈 これを追加
+        self.add_view(NotificationView()) 
+        self.add_view(SleepTimeSelectView()) # 👈 これを追加
         await self.tree.sync()
         
     # VC自動削除（空になってから60秒後に削除）
