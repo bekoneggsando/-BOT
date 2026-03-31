@@ -26,6 +26,14 @@ CH_ZATSUDAN = 1484385781241090128
 CH_SOUDAN   = 1484386174394040431
 CH_FRIEND   = 1484117154910699530
 
+# 時間ごとのロールID {時間(int): ロールID(int)}
+TIME_ROLES = {
+    0: 1488523839397953706, 1: 1488522397505028288, 2: 1488522658986459289, 3: 1488522716716994682, 4: 1488522760480096407, 5: 1488522805745156246,
+    6: 1488522891669667941, 7: 1488522917221236777, 8: 1488522921268875314, 9: 1488522923970138132, 10: 1488522926897762354, 11: 1488522929393242202,
+    12: 1488522929766535319, 13: 1488522930546671778, 14: 1488523194934493236, 15: 1488523196536721499, 16: 1488523197069660160, 17: 1488523197769846966,
+    18: 1488523207936839680, 19: 1488523210139111444, 20: 1488523212211093504, 21: 1488523217973936218, 22: 1488523220067029162, 23: 1488523221845409803
+}
+
     # ================= 設定エリア =================
 # ...既存の設定...
 
@@ -175,10 +183,44 @@ class MultiRecruitModal(ui.Modal):
             if item not in [self.count_input, self.limit_input, self.play_time] and item.value:
                 embed.add_field(name=f"🔘 {item.label[3:]}", value=item.value, inline=False)
 
-        # 通知ロールの取得
+        # --- 👇 ここから差し替え 👇 ---
         role_id = ROLE_IDS.get(self.mode)
-        mention_text = f"<@&{role_id}> " if role_id else ""
+        mention_text = ""
         
+        if role_id:
+            role = guild.get_role(role_id)
+            if role:
+                # 日本時間（JST）の現在時刻を取得
+                import pytz
+                from datetime import datetime
+                jst = pytz.timezone('Asia/Tokyo')
+                now_hour = datetime.now(jst).hour
+                
+                mentions = []
+                for m in role.members:
+                    if m.bot: continue
+                    
+                    # ユーザーのおやすみモード設定を確認
+                    if m.id in user_sleep_settings:
+                        start, end = user_sleep_settings[m.id]
+                        is_sleep = False
+                        
+                        if start == end: 
+                            is_sleep = False # 同じなら常に通知オン
+                        elif start < end: # 例: 9時から17時までオフ
+                            if start <= now_hour < end: is_sleep = True
+                        else: # 例: 23時から7時までオフ（日を跨ぐ設定）
+                            if now_hour >= start or now_hour < end: is_sleep = True
+                        
+                        if is_sleep: continue # 設定時間内ならメンションしない
+                    
+                    mentions.append(m.mention)
+                
+                # 起きている人にだけメンション（最大20人まで）
+                if mentions:
+                    mention_text = " ".join(mentions[:20]) + " "
+        # --- 👆 ここまで 👆 ---
+
         view = JoinView(host_id=it.user.id, target_count=target_count, vc_ch_id=vc_ch.id, text_ch_id=text_ch.id if text_ch else None)
         
         # 募集メッセージ送信
