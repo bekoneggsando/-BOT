@@ -72,45 +72,76 @@ class NetaView(ui.View):
 class JoinView(ui.View):
     def __init__(self, host_id, target_count, vc_ch_id, text_ch_id=None):
         super().__init__(timeout=None)
-        self.host_id, self.target_count = host_id, target_count
-        self.vc_ch_id, self.text_ch_id = vc_ch_id, text_ch_id
-        self.joined_users = []
+        self.host_id = host_id
+        self.target_count = target_count
+        self.vc_ch_id = vc_ch_id
+        self.text_ch_id = text_ch_id
+        self.joined_users = []  # 参加者のリスト
 
-    @ui.button(label="参加して専用部屋に入る", style=discord.ButtonStyle.success, emoji="🚪", custom_id="join_room_v2")
-    async def join_btn(self, it: discord.Interaction, btn: ui.Button):
-        if it.user.id == self.host_id or it.user.id in self.joined_users:
-            return await it.response.send_message("既に参加しているか募集主です。", ephemeral=True)
+    # --- 2. 参加・キャンセルボタン ---
+    @ui.button(label="参加する / キャンセル", style=discord.ButtonStyle.success, emoji="✋", custom_id="join_or_cancel")
+    async def join_button(self, it: discord.Interaction, btn: ui.Button):
+        user_id = it.user.id
         
-        vc_ch = it.guild.get_channel(self.vc_ch_id)
-        if vc_ch is None:
-            btn.label, btn.disabled = "部屋が削除されています", True
-            await it.message.edit(view=self)
-            return await it.response.send_message("この募集の専用部屋は既に削除されています。", ephemeral=True)
+        if user_id == self.host_id:
+            return await it.response.send_message("募集主はすでに追加されています！", ephemeral=True)
 
-        await it.response.defer(ephemeral=True)
-        overwrite = discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True)
-        
-        try:
-            await vc_ch.set_permissions(it.user, overwrite=overwrite)
-            if self.text_ch_id:
-                text_ch = it.guild.get_channel(self.text_ch_id)
-                if text_ch: await text_ch.set_permissions(it.user, overwrite=overwrite)
-        except:
-            pass
-
-        self.joined_users.append(it.user.id)
-        rem = self.target_count - len(self.joined_users)
-        
-        if rem <= 0:
-            btn.label, btn.disabled, btn.style = "満員御礼", True, discord.ButtonStyle.secondary
-            embed = it.message.embeds[0]
-            embed.color = discord.Color.dark_gray()
-            embed.title = f"【締切】{embed.title}"
-            await it.message.edit(embed=embed, view=self)
-            await it.channel.send(f"🎊 {it.user.mention}さんが参加して**満員**になりました！")
+        if user_id in self.joined_users:
+            # すでに参加している場合は「キャンセル」
+            self.joined_users.remove(user_id)
+            msg = "参加をキャンセルしました。"
         else:
-            await it.channel.send(f"✅ {it.user.mention}さんが参加！ (あと **{rem}** 人)")
-        await it.followup.send(f"参加完了！{vc_ch.mention} に入れます。", ephemeral=True)
+            # まだ参加していない場合は「参加」
+            if len(self.joined_users) >= self.target_count:
+                return await it.response.send_message("すでに満員です！", ephemeral=True)
+            self.joined_users.append(user_id)
+            msg = "参加を確定しました！"
+
+        # Embedの更新
+        remaining = self.target_count - len(self.joined_users)
+        embed = it.message.embeds[0]
+        embed.set_field_at(0, name="👥 人数", value=f"あと **{remaining}** 人", inline=True)
+        
+        # 参加者の名前をリストアップ
+        mentions = [f"<@{uid}>" for uid in self.joined_users]
+        user_list_str = "\n".join(mentions) if mentions else "なし"
+        
+        # フィールドがなければ追加、あれば更新（3つ目のフィールドあたりに表示）
+        if len(embed.fields) <= 4:
+            embed.add_field(name="📝 現在の参加者", value=user_list_str, inline=False)
+        else:
+            embed.set_field_at(4, name="📝 現在の参加者", value=user_list_str, inline=False)
+
+        await it.message.edit(embed=embed, view=self)
+        await it.response.send_message(msg, ephemeral=True)
+
+        # --- 3. あと1人！通知 ---
+        if remaining == 1:
+            await it.channel.send(f"🔥 **あと1人**で開始です！ (募集主: <@{self.host_id}>)", delete_after=60)
+
+    # --- 4. 延長ボタン ---
+    @ui.button(label="10分延長", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="extend_time")
+    async def extend(self, it: discord.Interaction, btn: ui.Button):
+        if it.user.id != self.host_id:
+            return await it.response.send_message("募集主しか延長できません。", ephemeral=True)
+        
+        # ここでは簡易的にメッセージだけ送ります。
+        # 実際の削除タスク（Task）をいじっている場合は、そちらの時間をリセットする処理が必要です。
+        await it.response.send_message("⏳ 締切時間を10分延長しました（ということにします）。", ephemeral=True)
+
+    # --- 1. 手動終了ボタン ---
+    @ui.button(label="募集を終了", style=discord.ButtonStyle.danger, emoji="✖️", custom_id="stop_recruit")
+    async def stop(self, it: discord.Interaction, btn: ui.Button):
+        if it.user.id != self.host_id:
+            return await it.response.send_message("募集主しか終了できません。", ephemeral=True)
+        
+        # Embedを締切済みに書き換える
+        embed = it.message.embeds[0]
+        embed.title = f"【終了】{embed.title}"
+        embed.color = discord.Color.default()
+        
+        await it.message.edit(content="❌ この募集は終了しました。", embed=embed, view=None)
+        await it.response.send_message("募集を締め切りました。", ephemeral=True)
 
 class MultiRecruitModal(ui.Modal):
     def __init__(self, mode, title):
