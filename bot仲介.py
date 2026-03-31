@@ -325,15 +325,19 @@ class NotificationView(ui.View):
     async def friend_role(self, it: discord.Interaction, btn: ui.Button):
         await self.toggle_role(it, "friend")
 
-    # 🌙 ここに custom_id="open_sleep_panel" を追加しました
-    @ui.button(label="🌙 通知オフ時間の詳細設定", style=discord.ButtonStyle.secondary, emoji="🕒", custom_id="open_sleep_panel")
-    async def open_sleep(self, it: discord.Interaction, btn: ui.Button):
+    @ui.button(label="⏰ 通知を受け取る時間の設定", style=discord.ButtonStyle.secondary, emoji="🕒", custom_id="open_time_setting")
+    async def open_time(self, it: discord.Interaction, btn: ui.Button):
         embed = discord.Embed(
-            title="🌙 おやすみモード（通知オフ）設定",
-            description="通知を受け取りたくない時間帯を指定できます。\n下のメニューから時間を選んでください。",
+            title="⏰ 通知OK時間の設定",
+            description=(
+                "自分が**通知を受け取ってもいい時間**をすべて選んでください。\n"
+                "（例：21時〜23時に遊びたいなら、21時、22時、23時を選択）\n\n"
+                "※ここで選ばなかった時間のロールは自動的に外れます。"
+            ),
             color=0x34495e
         )
-        await it.response.send_message(embed=embed, view=SleepTimeSelectView(), ephemeral=True)
+        # ここで新しく作った TimeRoleSelectView を呼び出す
+        await it.response.send_message(embed=embed, view=TimeRoleSelectView(), ephemeral=True)
 
 class UniversalPanelView(ui.View):
     def __init__(self):
