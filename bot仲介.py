@@ -381,35 +381,38 @@ class TimeRoleSelectView(ui.View):
         super().__init__(timeout=None)
 
     @ui.select(
-        placeholder="通知を受け取りたい時間を選んでください（複数選択可）",
-        min_values=1,
-        max_values=24, # 最大24個まで一気に選べる
+        placeholder="通知を受け取りたい時間をすべて選んでください（複数選択可）",
+        min_values=0, 
+        max_values=24, 
         options=[discord.SelectOption(label=f"{i}時OK", value=str(i)) for i in range(24)],
-        custom_id="time_role_select"
+        custom_id="time_role_multi_select"
     )
     async def select_time(self, it: discord.Interaction, select: ui.Select):
         await it.response.defer(ephemeral=True)
         
-        # 選択された時間のロールIDをリスト化
         selected_hours = [int(v) for v in select.values]
         add_roles = []
         remove_roles = []
 
+        # TIME_ROLES辞書を使って、選ばれた時間は付与、選ばれてない時間は解除
         for hour, r_id in TIME_ROLES.items():
             role = it.guild.get_role(r_id)
             if not role: continue
             
             if hour in selected_hours:
-                add_roles.append(role)
+                if role not in it.user.roles:
+                    add_roles.append(role)
             else:
-                # 選択しなかった時間は外す（更新処理）
-                remove_roles.append(role)
+                if role in it.user.roles:
+                    remove_roles.append(role)
 
-        # ロールの付け外しを一気に実行
         if remove_roles: await it.user.remove_roles(*remove_roles)
         if add_roles: await it.user.add_roles(*add_roles)
 
-        await it.followup.send(f"✅ 通知を受け取る時間を更新しました！", ephemeral=True)
+        await it.followup.send(
+            f"✅ 設定を更新しました！\n選択した時間以外は通知がこないようロールを整理しました。", 
+            ephemeral=True
+        )
 
 bot = MyBot()
 
