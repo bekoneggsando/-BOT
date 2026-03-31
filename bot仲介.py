@@ -184,41 +184,32 @@ class MultiRecruitModal(ui.Modal):
                 embed.add_field(name=f"🔘 {item.label[3:]}", value=item.value, inline=False)
 
         # --- 👇 ここから差し替え 👇 ---
-        role_id = ROLE_IDS.get(self.mode)
+        # --- 👇 24時間ロール対応版：ここから差し替え 👇 ---
+        role_id = ROLE_IDS.get(self.mode)  # ゲームロール（VALORANTなど）
         mention_text = ""
         
         if role_id:
-            role = guild.get_role(role_id)
-            if role:
-                # 日本時間（JST）の現在時刻を取得
-                import pytz
-                from datetime import datetime
-                jst = pytz.timezone('Asia/Tokyo')
-                now_hour = datetime.now(jst).hour
+            import pytz
+            from datetime import datetime
+            jst = pytz.timezone('Asia/Tokyo')
+            now_hour = datetime.now(jst).hour
+
+            # 現在の時間に対応するロールIDを取得 (TIME_ROLES辞書から)
+            time_role_id = TIME_ROLES.get(now_hour)
+            time_role = guild.get_role(time_role_id)
+            game_role = guild.get_role(role_id)
+
+            if time_role and game_role:
+                # 「今の時間ロール」を持っていて、かつ「ゲームロール」も持っている人を抽出
+                target_mentions = [m.mention for m in time_role.members if game_role in m.roles]
                 
-                mentions = []
-                for m in role.members:
-                    if m.bot: continue
-                    
-                    # ユーザーのおやすみモード設定を確認
-                    if m.id in user_sleep_settings:
-                        start, end = user_sleep_settings[m.id]
-                        is_sleep = False
-                        
-                        if start == end: 
-                            is_sleep = False # 同じなら常に通知オン
-                        elif start < end: # 例: 9時から17時までオフ
-                            if start <= now_hour < end: is_sleep = True
-                        else: # 例: 23時から7時までオフ（日を跨ぐ設定）
-                            if now_hour >= start or now_hour < end: is_sleep = True
-                        
-                        if is_sleep: continue # 設定時間内ならメンションしない
-                    
-                    mentions.append(m.mention)
-                
-                # 起きている人にだけメンション（最大20人まで）
-                if mentions:
-                    mention_text = " ".join(mentions[:20]) + " "
+                if target_mentions:
+                    # 最大50人までメンション（人数が増えても大丈夫なように少し増やしました）
+                    mention_text = " ".join(target_mentions[:50]) + " "
+                else:
+                    # もし該当者が一人もいなければ、募集主が寂しいので
+                    # 最低限ゲームロールへのメンションを入れる、などの調整も可能です
+                    mention_text = "" 
         # --- 👆 ここまで 👆 ---
 
         view = JoinView(host_id=it.user.id, target_count=target_count, vc_ch_id=vc_ch.id, text_ch_id=text_ch.id if text_ch else None)
