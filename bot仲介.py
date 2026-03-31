@@ -170,10 +170,25 @@ class MultiRecruitModal(ui.Modal):
             if item != self.count_input and item.value:
                 embed.add_field(name=f"🔘 {item.label[3:]}", value=item.value, inline=False)
         
+        # --- 👇 ここから通知用の修正箇所 👇 ---
+        
+        # 設定エリアで定義したROLE_IDSから該当するIDを取得
+        role_id = ROLE_IDS.get(self.mode)
+        # ロールIDがあればメンション文字列を作成、なければ空文字
+        mention_text = f"<@&{role_id}> " if role_id else ""
+        
         view = JoinView(host_id=it.user.id, target_count=target_count, vc_ch_id=vc_ch.id, text_ch_id=text_ch.id if text_ch else None)
-        await list_ch.send(content=f"📢 {it.user.mention}さんが新しい募集を開始しました！", embed=embed, view=view)
-        await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
+        
+        # contentにメンションを追加して送信
+        await list_ch.send(
+            content=f"{mention_text}📢 {it.user.mention}さんが新しい募集を開始しました！", 
+            embed=embed, 
+            view=view
+        )
+        
+        # --- 👆 ここまで 👆 ---
 
+        await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
 class UniversalPanelView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
