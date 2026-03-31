@@ -107,46 +107,48 @@ class MultiRecruitModal(ui.Modal):
     def __init__(self, mode, title):
         super().__init__(title=title)
         self.mode = mode
-        self.count_input = ui.TextInput(label="1. 募集人数 (数字)", placeholder="例: 2", min_length=1, max_length=1)
+        
+        # 全カテゴリー共通の「人数」と「時間設定」
+        self.count_input = ui.TextInput(label="1. 募集人数 (数字のみ)", placeholder="2", min_length=1, max_length=1)
+        self.limit_input = ui.TextInput(label="2. 何分待つ？ (数字のみ・自動締切用)", placeholder="15", min_length=1, max_length=2)
+        self.play_time = ui.TextInput(label="3. プレイ終了時間 (目安)", placeholder="23時まで / 2時間 / 未定", max_length=20)
+        
         self.add_item(self.count_input)
+        self.add_item(self.limit_input)
+        self.add_item(self.play_time)
 
+        # 残り2枠をカテゴリーごとに最適化
         if mode == "valorant":
-            self.add_item(ui.TextInput(label="2. 自分のランク", placeholder="例：ゴールド2", max_length=20))
-            self.add_item(ui.TextInput(label="3. モード / サーバー", placeholder="例：コンペ / 東京", max_length=30))
-            self.add_item(ui.TextInput(label="4. 相手への条件", placeholder="例：シルバー〜プラチナ", max_length=100))
-            self.add_item(ui.TextInput(label="5. 雰囲気・一言", style=discord.TextStyle.paragraph))
+            self.add_item(ui.TextInput(label="4. 自分のランク", placeholder="ゴールド2", max_length=20))
+            self.add_item(ui.TextInput(label="5. その他 (モード・条件・一言)", style=discord.TextStyle.paragraph))
         elif mode == "apex":
-            self.add_item(ui.TextInput(label="2. 自分のランク / Lv", placeholder="例：プラチナ", max_length=50))
-            self.add_item(ui.TextInput(label="3. 目的 / モード", placeholder="例：カジュアル", max_length=30))
-            self.add_item(ui.TextInput(label="4. 相手への希望条件", max_length=100))
-            self.add_item(ui.TextInput(label="5. VC・スタイル", style=discord.TextStyle.paragraph))
+            self.add_item(ui.TextInput(label="4. ランク / Lv", placeholder="プラチナ", max_length=20))
+            self.add_item(ui.TextInput(label="5. その他 (モード・条件・スタイル)", style=discord.TextStyle.paragraph))
         elif mode == "zatsudan":
-            self.add_item(ui.TextInput(label="2. 今の話題", max_length=50))
-            self.add_item(ui.TextInput(label="3. 活動期限", max_length=30))
-            self.add_item(ui.TextInput(label="4. 相手の雰囲気", max_length=100))
-            self.add_item(ui.TextInput(label="5. 備考・スタイル", style=discord.TextStyle.paragraph))
+            self.add_item(ui.TextInput(label="4. 今の話題", placeholder="アニメの話 / 雑談", max_length=50))
+            self.add_item(ui.TextInput(label="5. 雰囲気・備考", style=discord.TextStyle.paragraph))
         elif mode == "soudan":
-            self.add_item(ui.TextInput(label="2. 相談のジャンル", max_length=50))
-            self.add_item(ui.TextInput(label="3. 相談の重さ", max_length=30))
-            self.add_item(ui.TextInput(label="4. 相手への希望", required=False))
-            self.add_item(ui.TextInput(label="5. 接し方の希望", style=discord.TextStyle.paragraph))
+            self.add_item(ui.TextInput(label="4. 相談内容のジャンル", placeholder="仕事 / 人間関係", max_length=50))
+            self.add_item(ui.TextInput(label="5. 接し方の希望 (聞き専 / アドバイス等)", style=discord.TextStyle.paragraph))
         elif mode == "friend":
-            self.add_item(ui.TextInput(label="2. メインの趣味", max_length=50))
-            self.add_item(ui.TextInput(label="3. 活動時間帯", max_length=30))
-            self.add_item(ui.TextInput(label="4. 自分の雰囲気", max_length=100))
-            self.add_item(ui.TextInput(label="5. どんな友達になりたいか", style=discord.TextStyle.paragraph))
+            self.add_item(ui.TextInput(label="4. 趣味・活動時間帯", placeholder="ゲーム / 夜メイン", max_length=50))
+            self.add_item(ui.TextInput(label="5. 自己紹介・どんな友達になりたいか", style=discord.TextStyle.paragraph))
 
     async def on_submit(self, it: discord.Interaction):
-        if not self.count_input.value.isdigit():
-            return await it.response.send_message("人数は数字で入力してください。", ephemeral=True)
+        # 入力チェック
+        if not self.count_input.value.isdigit() or not self.limit_input.value.isdigit():
+            return await it.response.send_message("「人数」と「待機時間」は半角数字で入力してください。", ephemeral=True)
         
         target_count = int(self.count_input.value)
+        limit_minutes = int(self.limit_input.value) # 自動締切までの分数
+        
         await it.response.defer(ephemeral=True)
         guild = it.guild
         over = {guild.default_role: discord.PermissionOverwrite(view_channel=False),
                 it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
                 guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)}
 
+        # チャンネル作成
         vc_ch = await guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
         text_ch = await guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over) if self.mode == "friend" else None
 
@@ -155,40 +157,56 @@ class MultiRecruitModal(ui.Modal):
         if self.mode in ["zatsudan", "friend"]:
             await target_post.send(embed=discord.Embed(title="🚀 会話サポート", description="話題に困ったらボタンを押してね！"), view=NetaView())
 
-        # カテゴリーに応じた「募集一覧」投稿先を取得
+        # 投稿先
         target_list_id = LIST_CHANNELS.get(self.mode)
         list_ch = guild.get_channel(target_list_id) if target_list_id else it.channel
 
+        # Embed作成
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
         embed = discord.Embed(title=f"【{self.title}】詳細募集", color=colors.get(self.mode, 0x95a5a6))
         embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
         embed.add_field(name="👥 人数", value=f"あと **{target_count}** 人", inline=True)
+        embed.add_field(name="⏰ 終了予定", value=self.play_time.value, inline=True)
+        embed.add_field(name="⌛ 締切", value=f"{limit_minutes}分後に自動消去", inline=True)
         embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
-        if text_ch: embed.add_field(name="💬 専用チャット", value=text_ch.mention, inline=True)
 
         for item in self.children:
-            if item != self.count_input and item.value:
+            if item not in [self.count_input, self.limit_input, self.play_time] and item.value:
                 embed.add_field(name=f"🔘 {item.label[3:]}", value=item.value, inline=False)
-        
-        # --- 👇 ここから通知用の修正箇所 👇 ---
-        
-        # 設定エリアで定義したROLE_IDSから該当するIDを取得
+
+        # 通知ロールの取得
         role_id = ROLE_IDS.get(self.mode)
-        # ロールIDがあればメンション文字列を作成、なければ空文字
         mention_text = f"<@&{role_id}> " if role_id else ""
         
         view = JoinView(host_id=it.user.id, target_count=target_count, vc_ch_id=vc_ch.id, text_ch_id=text_ch.id if text_ch else None)
         
-        # contentにメンションを追加して送信
-        await list_ch.send(
-            content=f"{mention_text}📢 {it.user.mention}さんが新しい募集を開始しました！", 
-            embed=embed, 
+        # 募集メッセージ送信
+        list_ch_msg = await list_ch.send(
+            content=f"{mention_text}📢 {it.user.mention}さんが新しい募集を開始しました！",
+            embed=embed,
             view=view
         )
-        
-        # --- 👆 ここまで 👆 ---
+        await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！\n{limit_minutes}分間、誰も参加しなければ自動で削除されます。", ephemeral=True)
 
-        await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
+        # --- 🕒 自動締切タイマー（バックグラウンドで実行） ---
+        async def auto_close_timer():
+            await asyncio.sleep(limit_minutes * 60) # 分を秒に変換
+            # 誰も参加していない（joined_usersが空）場合のみ実行
+            if len(view.joined_users) == 0:
+                try:
+                    # チャンネル削除
+                    await vc_ch.delete()
+                    if text_ch: await text_ch.delete()
+                    
+                    # メッセージの更新（ボタンを消してタイトルを「期限切れ」に）
+                    embed.title = f"【期限切れ】{embed.title}"
+                    embed.color = discord.Color.dark_gray()
+                    await list_ch_msg.edit(content="⏰ 指定時間内に参加者がいなかったため、募集を終了しました。", embed=embed, view=None)
+                except Exception as e:
+                    print(f"自動消去エラー: {e}")
+
+        # タイマーを開始
+        bot.loop.create_task(auto_close_timer())
 
 class NotificationView(ui.View):
     def __init__(self):
