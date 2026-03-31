@@ -367,6 +367,41 @@ class MyBot(commands.Bot):
                     try: await before.channel.delete()
                     except: pass
 
+class TimeRoleSelectView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @ui.select(
+        placeholder="通知を受け取りたい時間を選んでください（複数選択可）",
+        min_values=1,
+        max_values=24, # 最大24個まで一気に選べる
+        options=[discord.SelectOption(label=f"{i}時OK", value=str(i)) for i in range(24)],
+        custom_id="time_role_select"
+    )
+    async def select_time(self, it: discord.Interaction, select: ui.Select):
+        await it.response.defer(ephemeral=True)
+        
+        # 選択された時間のロールIDをリスト化
+        selected_hours = [int(v) for v in select.values]
+        add_roles = []
+        remove_roles = []
+
+        for hour, r_id in TIME_ROLES.items():
+            role = it.guild.get_role(r_id)
+            if not role: continue
+            
+            if hour in selected_hours:
+                add_roles.append(role)
+            else:
+                # 選択しなかった時間は外す（更新処理）
+                remove_roles.append(role)
+
+        # ロールの付け外しを一気に実行
+        if remove_roles: await it.user.remove_roles(*remove_roles)
+        if add_roles: await it.user.add_roles(*add_roles)
+
+        await it.followup.send(f"✅ 通知を受け取る時間を更新しました！", ephemeral=True)
+
 bot = MyBot()
 
 @bot.tree.command(name="notification_setup", description="通知設定パネルを設置します（管理者専用）")
