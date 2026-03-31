@@ -215,34 +215,35 @@ class SleepTimeSelectView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    # 24時間分のセレクトメニュー（開始時間用）
     @ui.select(
-        placeholder="通知をオフにする開始時間を選んでください",
-        options=[discord.SelectOption(label=f"{i}:00からオフ", value=str(i)) for i in range(24)],
+        placeholder="何時から通知を止めますか？",
+        options=[discord.SelectOption(label=f"{i}時から通知オフ", value=str(i)) for i in range(24)],
         custom_id="sleep_start"
     )
     async def select_start(self, it: discord.Interaction, select: ui.Select):
         user_id = it.user.id
-        current = user_sleep_settings.get(user_id, (0, 0))
-        user_sleep_settings[user_id] = (int(select.values[0]), current[1])
-        await it.response.send_message(f"✅ 開始時間を {select.values[0]}時 に設定しました。", ephemeral=True)
+        start_time = int(select.values[0])
+        # 現在の終了設定を取得（なければ0）
+        _, end = user_sleep_settings.get(user_id, (0, 0))
+        user_sleep_settings[user_id] = (start_time, end)
+        await it.response.send_message(f"✅ **{start_time}時**から通知を止めるようにしました。", ephemeral=True)
 
-    # 24時間分のセレクトメニュー（終了時間用）
     @ui.select(
-        placeholder="通知を再開する終了時間を選んでください",
-        options=[discord.SelectOption(label=f"{i}:00までオフ", value=str(i)) for i in range(24)],
+        placeholder="何時に通知を再開しますか？",
+        options=[discord.SelectOption(label=f"{i}時から通知再開", value=str(i)) for i in range(24)],
         custom_id="sleep_end"
     )
     async def select_end(self, it: discord.Interaction, select: ui.Select):
         user_id = it.user.id
-        current = user_sleep_settings.get(user_id, (0, 0))
-        user_sleep_settings[user_id] = (current[0], int(select.values[0]))
-        await it.response.send_message(f"✅ 終了時間を {select.values[0]}時 に設定しました。", ephemeral=True)
+        end_time = int(select.values[0])
+        # 現在の開始設定を取得（なければ0）
+        start, _ = user_sleep_settings.get(user_id, (0, 0))
+        user_sleep_settings[user_id] = (start, end_time)
+        await it.response.send_message(f"✅ **{end_time}時**に通知を再開するようにしました。", ephemeral=True)
 
-    @ui.button(label="設定をリセット（24時間通知オン）", style=discord.ButtonStyle.danger)
+    @ui.button(label="設定をリセット（24時間通知を受け取る）", style=discord.ButtonStyle.danger, custom_id="sleep_reset")
     async def reset(self, it: discord.Interaction, btn: ui.Button):
-        if it.user.id in user_sleep_settings:
-            del user_sleep_settings[it.user.id]
+        user_sleep_settings.pop(it.user.id, None)
         await it.response.send_message("✅ 通知オフ設定を解除しました！いつでも通知が届きます。", ephemeral=True)
 
 class NotificationView(ui.View):
