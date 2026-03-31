@@ -205,7 +205,7 @@ class NotificationView(ui.View):
             await it.response.send_message(f"🔕 {role.name} 通知を【オフ】にしました。", ephemeral=True)
         else:
             await it.user.add_roles(role)
-            await it.response.send_message(f"🔔 {role.name} 通知を【オン】にしました！", ephemeral=True)
+            await it.response.send_message(f"🔔 {role.name} 通知を【オン】にしました！募集時に通知が届きます。", ephemeral=True)
 
     @ui.button(label="VALORANT通知", style=discord.ButtonStyle.primary, emoji="🎮", custom_id="role_val")
     async def val_role(self, it: discord.Interaction, btn: ui.Button):
@@ -244,8 +244,9 @@ class MyBot(commands.Bot):
     async def setup_hook(self):
         self.add_view(UniversalPanelView())
         self.add_view(NetaView())
-        self.add_view(NotificationView()) # 👈 これを付け加える！
+        self.add_view(NotificationView()) # 👈 これを追加
         await self.tree.sync()
+        
     # VC自動削除（空になってから60秒後に削除）
     async def on_voice_state_update(self, member, before, after):
         if before.channel and len(before.channel.members) == 0:
@@ -260,15 +261,20 @@ class MyBot(commands.Bot):
 
 bot = MyBot()
 
-@bot.command(name="role_panel")
-@commands.has_permissions(administrator=True)
-async def role_panel(ctx):
+@bot.tree.command(name="notification_setup", description="通知設定パネルを設置します（管理者専用）")
+@app_commands.checks.has_permissions(administrator=True)
+async def notification_setup(it: discord.Interaction):
     embed = discord.Embed(
-        title="🔔 募集通知設定",
-        description="新しい募集が投稿されたときに通知を受け取りたいカテゴリーを選んでください。\nボタンをもう一度押すと通知をオフにできます。",
+        title="🔔 募集通知設定センター",
+        description=(
+            "新しい募集が投稿されたときに通知（メンション）を受け取りたいカテゴリーを選んでください。\n\n"
+            "**ボタンを押すとオン/オフを切り替えられます。**\n"
+            "現在いるメンバーの方も、ここから設定可能です！"
+        ),
         color=0x2ecc71
     )
-    await ctx.send(embed=embed, view=NotificationView())
+    await it.response.send_message("通知設定パネルを設置しました！", ephemeral=True) # メッセージ自体は自分だけに
+    await it.channel.send(embed=embed, view=NotificationView()) # パネルをチャンネルに送信
 
 @bot.tree.command(name="setup")
 @app_commands.checks.has_permissions(administrator=True)
