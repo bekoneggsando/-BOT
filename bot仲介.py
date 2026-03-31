@@ -80,42 +80,47 @@ class JoinView(ui.View):
 
     # --- 2. 参加・キャンセルボタン ---
     @ui.button(label="参加する / キャンセル", style=discord.ButtonStyle.success, emoji="✋", custom_id="join_or_cancel")
+    # 参加ボタンの中身（Embed更新部分）を少しだけ賢くしました
     async def join_button(self, it: discord.Interaction, btn: ui.Button):
         user_id = it.user.id
-        
         if user_id == self.host_id:
             return await it.response.send_message("募集主はすでに追加されています！", ephemeral=True)
 
         if user_id in self.joined_users:
-            # すでに参加している場合は「キャンセル」
             self.joined_users.remove(user_id)
             msg = "参加をキャンセルしました。"
         else:
-            # まだ参加していない場合は「参加」
             if len(self.joined_users) >= self.target_count:
                 return await it.response.send_message("すでに満員です！", ephemeral=True)
             self.joined_users.append(user_id)
             msg = "参加を確定しました！"
 
-        # Embedの更新
-        remaining = self.target_count - len(self.joined_users)
+        # --- Embedの更新ロジック ---
         embed = it.message.embeds[0]
+        remaining = self.target_count - len(self.joined_users)
+        
+        # 1番目のフィールド（人数）を更新
         embed.set_field_at(0, name="👥 人数", value=f"あと **{remaining}** 人", inline=True)
         
-        # 参加者の名前をリストアップ
+        # 参加者リストの文字列作成
         mentions = [f"<@{uid}>" for uid in self.joined_users]
-        user_list_str = "\n".join(mentions) if mentions else "なし"
+        user_list_str = "、".join(mentions) if mentions else "なし"
+
+        # 「現在の参加者」フィールドを探して更新、なければ作る
+        target_field_index = None
+        for i, field in enumerate(embed.fields):
+            if field.name == "📝 現在の参加者":
+                target_field_index = i
+                break
         
-        # フィールドがなければ追加、あれば更新（3つ目のフィールドあたりに表示）
-        if len(embed.fields) <= 4:
-            embed.add_field(name="📝 現在の参加者", value=user_list_str, inline=False)
+        if target_field_index is not None:
+            embed.set_field_at(target_field_index, name="📝 現在の参加者", value=user_list_str, inline=False)
         else:
-            embed.set_field_at(4, name="📝 現在の参加者", value=user_list_str, inline=False)
+            embed.add_field(name="📝 現在の参加者", value=user_list_str, inline=False)
 
         await it.message.edit(embed=embed, view=self)
         await it.response.send_message(msg, ephemeral=True)
 
-        # --- 3. あと1人！通知 ---
         if remaining == 1:
             await it.channel.send(f"🔥 **あと1人**で開始です！ (募集主: <@{self.host_id}>)", delete_after=60)
 
