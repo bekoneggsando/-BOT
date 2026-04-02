@@ -499,7 +499,96 @@ class TimeRoleSelectView(ui.View):
             ephemeral=True
         )
 
+# ================= 設定エリア（ここを埋めてください） =================
+ROLE_ID_MALE   = 1489141133027049572  # 男性ロールのID
+ROLE_ID_FEMALE = 1489141199066365963  # 女性ロールのID
+
+# 投稿先のチャンネル（異性が閲覧するチャンネル）
+CH_ID_FOR_FEMALE = 1489274994679746640  # 男性の募集が飛んでいく場所（女性が見るch）
+CH_ID_FOR_MALE   = 1489135172191256688  # 女性の募集が飛んでいく場所（男性が見るch）
+# =================================================================
+
+class PartnerModal(ui.Modal, title="💖 パートナー募集プロフィール"):
+    age = ui.TextInput(label="1. 年齢（成人済の方のみ）", placeholder="例：22歳", min_length=1, max_length=10)
+    place = ui.TextInput(label="2. お住まい / 職業", placeholder="例：東京 / 会社員", max_length=50)
+    hobby = ui.TextInput(label="3. 趣味 / 性格", placeholder="例：ゲーム、旅行 / 穏やかな性格です", max_length=100)
+    target = ui.TextInput(label="4. 理想のタイプ", placeholder="例：一緒に笑い合える方", max_length=100)
+    message = ui.TextInput(label="5. 自己紹介・一言", style=discord.TextStyle.paragraph, placeholder="自由に書いてください！")
+
+    async def on_submit(self, it: discord.Interaction):
+        await it.response.defer(ephemeral=True)
+        
+        # --- 性別判定ロジック ---
+        target_ch_id = None
+        user_role_ids = [role.id for role in it.user.roles]
+
+        if ROLE_ID_MALE in user_role_ids:
+            # 投稿者が男性なら、女性が見るチャンネルへ
+            target_ch_id = CH_ID_FOR_FEMALE
+            gender_label = "♂ 男性からの募集"
+            embed_color = 0x3498DB # 青系
+        elif ROLE_ID_FEMALE in user_role_ids:
+            # 投稿者が女性なら、男性が見るチャンネルへ
+            target_ch_id = CH_ID_FOR_MALE
+            gender_label = "♀ 女性からの募集"
+            embed_color = 0xFF69B4 # ピンク系
+        else:
+            # 性別ロールがない場合
+            return await it.followup.send("性別ロール（男性/女性）を持っていないため投稿できません。オンボーディングで選択してください。", ephemeral=True)
+
+        list_ch = it.guild.get_channel(target_ch_id)
+        if not list_ch:
+            return await it.followup.send("投稿先のチャンネルが見つかりません。", ephemeral=True)
+
+        # --- Embed作成 ---
+        embed = discord.Embed(title=f"{gender_label}", color=embed_color)
+        embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
+        
+        embed.add_field(name="🎂 年齢", value=self.age.value, inline=True)
+        embed.add_field(name="📍 居住 / 職業", value=self.place.value, inline=True)
+        embed.add_field(name="🎨 趣味・性格", value=self.hobby.value, inline=False)
+        embed.add_field(name="💎 理想のタイプ", value=self.target.value, inline=False)
+        embed.add_field(name="📝 自己紹介", value=self.message.value, inline=False)
+        
+        await list_ch.send(content=f"💖 {it.user.mention}さんが新しく募集しました！", embed=embed)
+        await it.followup.send(f"募集を {list_ch.mention} に投稿しました！", ephemeral=True)
+
+class PartnerPanelView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @ui.button(label="💖 プロフィールを書いて募集する", style=discord.ButtonStyle.danger, custom_id="start_partner_recruit")
+    async def partner_btn(self, it: discord.Interaction, btn: ui.Button):
+        await it.response.send_modal(PartnerModal())
+
 bot = MyBot()
+
+# サーバー管理者がパネルを設置するためのコマンド
+@bot.tree.command(name="setup_partner", description="パートナー募集パネルを設置します")
+@app_commands.checks.has_permissions(administrator=True) # 管理者のみ実行可能
+async def setup_partner(it: discord.Interaction):
+    # パネルの見た目（Embed）を設定
+    embed = discord.Embed(
+        title="💖 パートナー募集（成人限定）",
+        description=(
+            "素敵な出会いを探してみませんか？\n"
+            "下のボタンからプロフィールを記入して投稿してください。\n\n"
+            "**⚠️ 注意事項**\n"
+            "・男性は「女性用募集一覧」へ、女性は「男性用募集一覧」へ自動で投稿されます。\n"
+            "・虚偽の報告や迷惑行為は即追放対象となります。\n"
+            "・相手を尊重したやり取りを心がけましょう。"
+        ),
+        color=0xFF69B4 # ピンク色
+    )
+    
+    # アイコン画像があれば設定（任意）
+    # embed.set_thumbnail(url="あなたのサーバーアイコンURL")
+
+    # ボタンを表示してメッセージを送信
+    await it.response.send_message(
+        embed=embed, 
+        view=PartnerPanelView() # 先ほど作ったボタンクラスを呼び出す
+    )
 
 @bot.tree.command(name="notification_setup", description="通知設定パネルを設置します（管理者専用）")
 @app_commands.checks.has_permissions(administrator=True)
