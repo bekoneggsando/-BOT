@@ -508,59 +508,74 @@ CH_ID_FOR_FEMALE = 1489274994679746640  # 男性の募集が飛んでいく場�
 CH_ID_FOR_MALE   = 1489135172191256688  # 女性の募集が飛んでいく場所（男性が見るch）
 # =================================================================
 
+import discord
+from discord import ui, app_commands
+import asyncio
+
 class PartnerModal(ui.Modal, title="💖 パートナー募集プロフィール"):
-    age = ui.TextInput(label="1. 年齢（成人済の方のみ）", placeholder="例：22歳", min_length=1, max_length=10)
-    place = ui.TextInput(label="2. お住まい / 職業", placeholder="例：東京 / 会社員", max_length=50)
-    hobby = ui.TextInput(label="3. 趣味 / 性格", placeholder="例：ゲーム、旅行 / 穏やかな性格です", max_length=100)
-    target = ui.TextInput(label="4. 理想のタイプ", placeholder="例：一緒に笑い合える方", max_length=100)
-    message = ui.TextInput(label="5. 自己紹介・一言", style=discord.TextStyle.paragraph, placeholder="自由に書いてください！")
+    age = ui.TextInput(label="🎂 年齢（必須）", placeholder="例：24歳", min_length=1, max_length=10)
+    place = ui.TextInput(label="📍 お住まい / 職業", placeholder="例：東京 / 看護師", max_length=50)
+    hobby = ui.TextInput(label="🎨 趣味・好きなこと", placeholder="例：FPS、カフェ巡り、アニメ鑑賞", max_length=100)
+    target = ui.TextInput(label="💎 理想のタイプ", placeholder="例：価値観が合う、一緒にゲームを楽しめる方", max_length=100)
+    message = ui.TextInput(label="📝 自己紹介・お誘い", style=discord.TextStyle.paragraph, placeholder="あなたの魅力を自由に書いてください！")
 
     async def on_submit(self, it: discord.Interaction):
         await it.response.defer(ephemeral=True)
-        
-        # --- 性別判定ロジック ---
-        target_ch_id = None
+        guild = it.guild
+
+        # --- 性別判定と投稿先の決定 ---
         user_role_ids = [role.id for role in it.user.roles]
-
         if ROLE_ID_MALE in user_role_ids:
-            # 投稿者が男性なら、女性が見るチャンネルへ
-            target_ch_id = CH_ID_FOR_FEMALE
-            gender_label = "♂ 男性からの募集"
-            embed_color = 0x3498DB # 青系
+            target_ch_id, gender_label, embed_color = CH_ID_FOR_FEMALE, "♂ 男性からの募集", 0x3498DB
         elif ROLE_ID_FEMALE in user_role_ids:
-            # 投稿者が女性なら、男性が見るチャンネルへ
-            target_ch_id = CH_ID_FOR_MALE
-            gender_label = "♀ 女性からの募集"
-            embed_color = 0xFF69B4 # ピンク系
+            target_ch_id, gender_label, embed_color = CH_ID_FOR_MALE, "♀ 女性からの募集", 0xFF69B4
         else:
-            # 性別ロールがない場合
-            return await it.followup.send("性別ロール（男性/女性）を持っていないため投稿できません。オンボーディングで選択してください。", ephemeral=True)
+            return await it.followup.send("性別ロールがないため投稿できません。", ephemeral=True)
 
-        list_ch = it.guild.get_channel(target_ch_id)
-        if not list_ch:
-            return await it.followup.send("投稿先のチャンネルが見つかりません。", ephemeral=True)
-
-        # --- Embed作成 ---
-        embed = discord.Embed(title=f"{gender_label}", color=embed_color)
-        embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
+        # --- 1. 専用のペア部屋（Text & VC）を自動作成 ---
+        category = guild.get_channel(PARTNER_CATEGORY_ID)
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
+        }
         
-        embed.add_field(name="🎂 年齢", value=self.age.value, inline=True)
-        embed.add_field(name="📍 居住 / 職業", value=self.place.value, inline=True)
+        # チャンネル作成
+        pair_name = f"💖-{it.user.display_name}の専用部屋"
+        pair_text = await guild.create_text_channel(name=pair_name, category=category, overwrites=overwrites)
+        pair_vc = await guild.create_voice_channel(name=pair_name, category=category, overwrites=overwrites)
+
+        # 部屋の中に案内を出す
+        welcome_embed = discord.Embed(
+            title="🌸 パートナー募集専用ルーム",
+            description=f"{it.user.mention} さんの募集に興味を持った人がここに参加します。\n二人だけの空間ですので、ゆっくりお話ししてください。",
+            color=embed_color
+        )
+        await pair_text.send(embed=welcome_embed)
+
+        # --- 2. 募集カード（Embed）の作成と投稿 ---
+        list_ch = guild.get_channel(target_ch_id)
+        
+        # デザインを見やすく装飾
+        embed = discord.Embed(title=f"【{gender_label}】", color=embed_color)
+        embed.set_author(name=f"{it.user.display_name} さん", icon_url=it.user.display_avatar.url)
+        
+        # フィールドを整理して見やすく
+        embed.add_field(name="✨ 年齢", value=f"```\n{self.age.value}\n```", inline=True)
+        embed.add_field(name="✨ 居住/職業", value=f"```\n{self.place.value}\n```", inline=True)
         embed.add_field(name="🎨 趣味・性格", value=self.hobby.value, inline=False)
         embed.add_field(name="💎 理想のタイプ", value=self.target.value, inline=False)
-        embed.add_field(name="📝 自己紹介", value=self.message.value, inline=False)
+        embed.add_field(name="💬 自己紹介", value=f"```\n{self.message.value}\n```", inline=False)
         
-        await list_ch.send(content=f"💖 {it.user.mention}さんが新しく募集しました！", embed=embed)
-        await it.followup.send(f"募集を {list_ch.mention} に投稿しました！", ephemeral=True)
+        embed.set_footer(text="下のボタンを押すと、この人と二人だけの専用部屋に入れます。")
 
-class PartnerPanelView(ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @ui.button(label="💖 プロフィールを書いて募集する", style=discord.ButtonStyle.danger, custom_id="start_partner_recruit")
-    async def partner_btn(self, it: discord.Interaction, btn: ui.Button):
-        await it.response.send_modal(PartnerModal())
-
+        # 参加ボタンを作成（JoinViewを再利用するか、新しく定義）
+        # ※ここで JoinView(target_count=1) を呼ぶことで、1人参加したら締切にできます
+        from __main__ import JoinView # 既存のJoinViewを呼び出し
+        view = JoinView(host_id=it.user.id, target_count=1, vc_ch_id=pair_vc.id, text_ch_id=pair_text.id)
+        
+        await list_ch.send(content=f"💖 新しい出会いの募集です！", embed=embed, view=view)
+        await it.followup.send(f"募集を投稿し、専用部屋 {pair_text.mention} を作成しました！", ephemeral=True)
 bot = MyBot()
 
 # サーバー管理者がパネルを設置するためのコマンド
