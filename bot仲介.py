@@ -222,7 +222,7 @@ class MultiRecruitModal(ui.Modal):
                 view=NetaView()
             )
 
-        # 5. 24時間ロールメンション（睡眠設定 user_sleep_settings の考慮）
+        # --- 🕒 修正版：24時間ロールメンション (睡眠設定の判定) ---
         role_id = ROLE_IDS.get(self.mode)
         mention_text = ""
         
@@ -237,12 +237,24 @@ class MultiRecruitModal(ui.Modal):
             game_role = guild.get_role(role_id)
 
             if time_role and game_role:
-                # 睡眠設定辞書(user_sleep_settings)に「今の時間」が含まれている人を除外
-                sleeping_users = user_sleep_settings.get(now_hour, [])
-                target_mentions = [
-                    m.mention for m in time_role.members 
-                    if game_role in m.roles and m.id not in sleeping_users
-                ]
+                target_mentions = []
+                for m in time_role.members:
+                    if game_role in m.roles:
+                        # ユーザーごとの睡眠設定 (開始, 終了) を取得
+                        start, end = user_sleep_settings.get(m.id, (None, None))
+                        
+                        is_sleeping = False
+                        if start is not None and end is not None:
+                            # 睡眠時間の判定（例: 23時から翌7時まで など）
+                            if start < end:
+                                if start <= now_hour < end:
+                                    is_sleeping = True
+                            else: # 日を跨ぐ場合 (例: 23時から5時)
+                                if now_hour >= start or now_hour < end:
+                                    is_sleeping = True
+                        
+                        if not is_sleeping:
+                            target_mentions.append(m.mention)
                 
                 if target_mentions:
                     mention_text = " ".join(target_mentions[:30]) + " "
