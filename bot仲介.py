@@ -427,6 +427,13 @@ class UniversalPanelView(ui.View):
         if res: await it.response.send_modal(MultiRecruitModal(res[0], res[1]))
         else: await it.response.send_message("募集対象外のチャンネルです。", ephemeral=True)
 
+class PartnerPanelView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    @ui.button(label="💖 プロフィールを書いて募集", style=discord.ButtonStyle.danger, custom_id="partner_start_v1")
+    async def start_partner(self, it: discord.Interaction, btn: ui.Button):
+        await it.response.send_modal(PartnerModal())
+
 class MyBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
