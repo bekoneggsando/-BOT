@@ -256,8 +256,11 @@ class MultiRecruitModal(ui.Modal):
                         if not is_sleeping:
                             target_mentions.append(m.mention)
                 
+                # --- 修正箇所：見た目を整える ---
                 if target_mentions:
-                    mention_text = " ".join(target_mentions[:30]) + " "
+                    header = f"📢 **{time_role.name}** の皆さんへ募集です！\n"
+                    mentions = " ".join(target_mentions[:20])
+                    mention_text = f"{header}{mentions}\n"
 
         # 6. Embed作成（初対面歓迎・内輪ノリなしを明記）
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
