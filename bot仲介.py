@@ -439,7 +439,35 @@ class MyBot(commands.Bot):
         self.add_view(NotificationView())
         self.add_view(PartnerPanelView()) # ←これを追加！
         await self.tree.sync()
+
+    # ユーザーがサーバーから抜けたときに実行される
+    async def on_member_remove(self, member):
+        # ログを流したいチャンネルのIDを指定してください
+        LOG_CHANNEL_ID = 1485178544052240514 # 例として「悩み相談」のIDを入れています
         
+        channel = member.guild.get_channel(LOG_CHANNEL_ID)
+        if not channel:
+            return
+
+        # 抜けた人の情報を Embed で綺麗に表示
+        embed = discord.Embed(
+            title="👋 メンバーがサーバーから退出しました",
+            description=f"**ユーザー名:** {member.mention} ({member.name})\n**ユーザーID:** `{member.id}`",
+            color=0xff0000, # 赤色
+            timestamp=datetime.now()
+        )
+        
+        # もしその人が持っていたロールも知りたい場合は追加
+        roles = [role.mention for role in member.roles if role != member.guild.default_role]
+        if roles:
+            embed.add_field(name="持っていたロール", value=" ".join(roles), inline=False)
+        
+        embed.set_thumbnail(url=member.display_avatar.url)
+        
+        await channel.send(embed=embed)
+
+    
+    
     # VC自動削除（空になってから60秒後に削除）
     async def on_voice_state_update(self, member, before, after):
         if before.channel and len(before.channel.members) == 0:
