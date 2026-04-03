@@ -443,7 +443,7 @@ class MyBot(commands.Bot):
     # ユーザーがサーバーから抜けたときに実行される
     async def on_member_remove(self, member):
         # ログを流したいチャンネルのIDを指定してください
-        LOG_CHANNEL_ID = 1485178544052240514 # 例として「悩み相談」のIDを入れています
+        LOG_CHANNEL_ID = 1489462038475575489 # 例として「悩み相談」のIDを入れています
         
         channel = member.guild.get_channel(LOG_CHANNEL_ID)
         if not channel:
