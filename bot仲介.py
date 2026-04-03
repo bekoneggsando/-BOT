@@ -9,6 +9,8 @@ from datetime import datetime
 # ================= 設定エリア =================
 TOKEN = os.getenv("TOKEN")
 
+user_sleep_settings = {}
+
 # 📢 各カテゴリーの「募集カード」を投稿するチャンネルID
 # 右側の数字を、あなたが作成したそれぞれの専用チャンネルIDに書き換えてください
 LIST_CHANNELS = {
@@ -190,35 +192,68 @@ class MultiRecruitModal(ui.Modal):
             self.add_item(ui.TextInput(label="5. 自己紹介・どんな友達になりたいか", style=discord.TextStyle.paragraph))
 
     async def on_submit(self, it: discord.Interaction):
-        # 入力チェック
+        # 1. 入力チェック
         if not self.count_input.value.isdigit() or not self.limit_input.value.isdigit():
             return await it.response.send_message("「人数」と「待機時間」は半角数字で入力してください。", ephemeral=True)
         
         target_count = int(self.count_input.value)
-        limit_minutes = int(self.limit_input.value) # 自動締切までの分数
+        limit_minutes = int(self.limit_input.value)
         
         await it.response.defer(ephemeral=True)
         guild = it.guild
-        over = {guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
-                guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)}
+        
+        # 2. 権限設定
+        over = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
+        }
 
-        # チャンネル作成
+        # 3. 専用部屋（VC/Text）の作成
         vc_ch = await guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
         text_ch = await guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over) if self.mode == "friend" else None
 
-        # 部屋に話題ガチャを投稿
+        # 4. 部屋の中に話題ガチャを投稿（雑談やフレンド募集時）
         target_post = text_ch if text_ch else vc_ch
         if self.mode in ["zatsudan", "friend"]:
-            await target_post.send(embed=discord.Embed(title="🚀 会話サポート", description="話題に困ったらボタンを押してね！"), view=NetaView())
+            await target_post.send(
+                content="✅ 専用部屋を作成しました！\n内輪ノリなし、初対面歓迎の募集です。話題に困ったらガチャを回してね！",
+                embed=discord.Embed(title="🚀 会話サポート", description="「最近のマイブームは？」など、話しやすいお題が出ます。"),
+                view=NetaView()
+            )
 
-        # 投稿先
-        target_list_id = LIST_CHANNELS.get(self.mode)
-        list_ch = guild.get_channel(target_list_id) if target_list_id else it.channel
+        # 5. 24時間ロールメンション（睡眠設定 user_sleep_settings の考慮）
+        role_id = ROLE_IDS.get(self.mode)
+        mention_text = ""
+        
+        if role_id:
+            import pytz
+            from datetime import datetime
+            jst = pytz.timezone('Asia/Tokyo')
+            now_hour = datetime.now(jst).hour
 
-        # Embed作成
+            time_role_id = TIME_ROLES.get(now_hour)
+            time_role = guild.get_role(time_role_id)
+            game_role = guild.get_role(role_id)
+
+            if time_role and game_role:
+                # 睡眠設定辞書(user_sleep_settings)に「今の時間」が含まれている人を除外
+                sleeping_users = user_sleep_settings.get(now_hour, [])
+                target_mentions = [
+                    m.mention for m in time_role.members 
+                    if game_role in m.roles and m.id not in sleeping_users
+                ]
+                
+                if target_mentions:
+                    mention_text = " ".join(target_mentions[:30]) + " "
+
+        # 6. Embed作成（初対面歓迎・内輪ノリなしを明記）
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
-        embed = discord.Embed(title=f"【{self.title}】詳細募集", color=colors.get(self.mode, 0x95a5a6))
+        embed = discord.Embed(
+            title=f"【{self.title}】詳細募集", 
+            description="✨ **初対面歓迎・ネッ友募集！** ✨\n内輪ノリがないので誰でも入りやすいです。コミュニケーション重視の専用部屋を作りました！",
+            color=colors.get(self.mode, 0x95a5a6)
+        )
         embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
         embed.add_field(name="👥 人数", value=f"あと **{target_count}** 人", inline=True)
         embed.add_field(name="⏰ 終了予定", value=self.play_time.value, inline=True)
@@ -229,105 +264,49 @@ class MultiRecruitModal(ui.Modal):
             if item not in [self.count_input, self.limit_input, self.play_time] and item.value:
                 embed.add_field(name=f"🔘 {item.label[3:]}", value=item.value, inline=False)
 
-        # --- 👇 ここから差し替え 👇 ---
-        # --- 👇 24時間ロール対応版：ここから差し替え 👇 ---
-        role_id = ROLE_IDS.get(self.mode)  # ゲームロール（VALORANTなど）
-        mention_text = ""
-        
-        if role_id:
-            import pytz
-            from datetime import datetime
-            jst = pytz.timezone('Asia/Tokyo')
-            now_hour = datetime.now(jst).hour
+        # 7. 募集カードの送信とViewのセット
+        target_list_id = LIST_CHANNELS.get(self.mode)
+        list_ch = guild.get_channel(target_list_id) if target_list_id else it.channel
 
-            # 現在の時間に対応するロールIDを取得 (TIME_ROLES辞書から)
-            time_role_id = TIME_ROLES.get(now_hour)
-            time_role = guild.get_role(time_role_id)
-            game_role = guild.get_role(role_id)
-
-            if time_role and game_role:
-                # 「今の時間ロール」を持っていて、かつ「ゲームロール」も持っている人を抽出
-                target_mentions = [m.mention for m in time_role.members if game_role in m.roles]
-                
-                if target_mentions:
-                    # 最大50人までメンション（人数が増えても大丈夫なように少し増やしました）
-                    mention_text = " ".join(target_mentions[:50]) + " "
-                else:
-                    # もし該当者が一人もいなければ、募集主が寂しいので
-                    # 最低限ゲームロールへのメンションを入れる、などの調整も可能です
-                    mention_text = "" 
-        # --- 👆 ここまで 👆 ---
-
-        # --- 👇 修正：limit_minutes を View に渡すように変更 ---
         view = JoinView(
             host_id=it.user.id, 
             target_count=target_count, 
             vc_ch_id=vc_ch.id, 
-            limit_minutes=limit_minutes, # これを追加
+            limit_minutes=limit_minutes,
             text_ch_id=text_ch.id if text_ch else None
         )
         
-        # 募集メッセージ送信
         list_ch_msg = await list_ch.send(
             content=f"{mention_text}📢 {it.user.mention}さんが新しい募集を開始しました！",
             embed=embed,
             view=view
         )
-        
+
         await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！\n設定した時間が経過するか、手動で終了すると部屋は消去されます。", ephemeral=True)
 
-        # --- 🕒 本気の延長対応・自動消去ループ ---
-        # view.remaining_seconds が 0 になるまで 10秒おきに監視し続ける
-        import asyncio
-        while view.remaining_seconds > 0:
-            await asyncio.sleep(10)
-            view.remaining_seconds -= 10
-            
-            # 手動終了ボタンなどでメッセージが消えていた場合はループ終了
-            try:
-                # メッセージがまだ存在するかチェック
-                await list_ch_msg.edit() 
-            except:
-                break
-
-        # --- 🧹 自動消去の実行 ---
-        try:
-            # 募集メッセージの削除
-            await list_ch_msg.delete()
-        except:
-            pass
-            
-        try:
-            # VCの削除
-            await vc_ch.delete()
-            # テキストチャンネルがあれば削除
-            if text_ch:
-                await text_ch.delete()
-        except:
-            # すでに削除されている場合は何もしない
-            pass
-
-        # --- 🕒 自動締切タイマー（バックグラウンドで実行） ---
-        async def auto_close_timer():
-            await asyncio.sleep(limit_minutes * 60) # 分を秒に変換
-            # 誰も参加していない（joined_usersが空）場合のみ実行
-            if len(view.joined_users) == 0:
+        # 8. 自動消去・延長対応ループ（バックグラウンドで実行）
+        async def cleanup_loop():
+            import asyncio
+            while view.remaining_seconds > 0:
+                await asyncio.sleep(10)
+                view.remaining_seconds -= 10
                 try:
-                    # チャンネル削除
+                    await list_ch_msg.edit() # メッセージの生存確認
+                except:
+                    break # メッセージが手動削除されていたらループ終了
+
+            # 実際の消去処理
+            try: await list_ch_msg.delete()
+            except: pass
+            
+            try:
+                await asyncio.sleep(5) 
+                if not vc_ch.members: # 誰もいなければ削除
                     await vc_ch.delete()
                     if text_ch: await text_ch.delete()
-                    
-                    # メッセージの更新（ボタンを消してタイトルを「期限切れ」に）
-                    embed.title = f"【期限切れ】{embed.title}"
-                    embed.color = discord.Color.dark_gray()
-                    await list_ch_msg.edit(content="⏰ 指定時間内に参加者がいなかったため、募集を終了しました。", embed=embed, view=None)
-                except Exception as e:
-                    print(f"自動消去エラー: {e}")
+            except: pass
 
-        # タイマーを開始
-        bot.loop.create_task(auto_close_timer())
-
-user_sleep_settings = {}
+        it.client.loop.create_task(cleanup_loop())
 
 class SleepTimeSelectView(ui.View):
     def __init__(self):
