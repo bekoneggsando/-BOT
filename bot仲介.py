@@ -491,6 +491,14 @@ import discord
 from discord import ui, app_commands
 import asyncio
 
+class PartnerPanelView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+    @ui.button(label="💖 プロフィールを書いて募集", style=discord.ButtonStyle.danger, custom_id="partner_start")
+    async def start_partner(self, it: discord.Interaction, btn: ui.Button):
+        # パートナー用Modalを呼び出す
+        await it.response.send_modal(PartnerModal())
+
 class PartnerModal(ui.Modal, title="💖 パートナー募集プロフィール"):
     age = ui.TextInput(label="🎂 年齢（必須）", placeholder="例：24歳", min_length=1, max_length=10)
     place = ui.TextInput(label="📍 お住まい / 職業", placeholder="例：東京 / 看護師", max_length=50)
