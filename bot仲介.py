@@ -530,9 +530,10 @@ class PartnerModal(ui.Modal, title="💖 パートナー募集プロフィール
         elif ROLE_ID_FEMALE in user_role_ids:
             target_ch_id, gender_label, embed_color = CH_ID_FOR_MALE, "♀ 女性からの募集", 0xFF69B4
         else:
-            return await it.followup.send("性別ロールがないため投稿できません。", ephemeral=True)
+            return await it.followup.send("性別ロールがないため投稿できません。男性または女性ロールを付与してください。", ephemeral=True)
 
         # --- 1. 専用のペア部屋（Text & VC）を自動作成 ---
+        # 設定エリアで定義した PARTNER_CATEGORY_ID を使用
         category = guild.get_channel(PARTNER_CATEGORY_ID)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -540,8 +541,7 @@ class PartnerModal(ui.Modal, title="💖 パートナー募集プロフィール
             guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
         }
         
-        # チャンネル作成
-        pair_name = f"💖-{it.user.display_name}の専用部屋"
+        pair_name = f"💖-{it.user.display_name}の部屋"
         pair_text = await guild.create_text_channel(name=pair_name, category=category, overwrites=overwrites)
         pair_vc = await guild.create_voice_channel(name=pair_name, category=category, overwrites=overwrites)
 
@@ -555,27 +555,54 @@ class PartnerModal(ui.Modal, title="💖 パートナー募集プロフィール
 
         # --- 2. 募集カード（Embed）の作成と投稿 ---
         list_ch = guild.get_channel(target_ch_id)
-        
-        # デザインを見やすく装飾
+        if not list_ch:
+            return await it.followup.send("投稿先のチャンネルが見つかりません。設定を確認してください。", ephemeral=True)
+
         embed = discord.Embed(title=f"【{gender_label}】", color=embed_color)
         embed.set_author(name=f"{it.user.display_name} さん", icon_url=it.user.display_avatar.url)
         
-        # フィールドを整理して見やすく
         embed.add_field(name="✨ 年齢", value=f"```\n{self.age.value}\n```", inline=True)
         embed.add_field(name="✨ 居住/職業", value=f"```\n{self.place.value}\n```", inline=True)
         embed.add_field(name="🎨 趣味・性格", value=self.hobby.value, inline=False)
         embed.add_field(name="💎 理想のタイプ", value=self.target.value, inline=False)
         embed.add_field(name="💬 自己紹介", value=f"```\n{self.message.value}\n```", inline=False)
-        
         embed.set_footer(text="下のボタンを押すと、この人と二人だけの専用部屋に入れます。")
 
-        # 参加ボタンを作成（JoinViewを再利用するか、新しく定義）
-        # ※ここで JoinView(target_count=1) を呼ぶことで、1人参加したら締切にできます
-        from __main__ import JoinView # 既存のJoinViewを呼び出し
-        view = JoinView(host_id=it.user.id, target_count=1, vc_ch_id=pair_vc.id, text_ch_id=pair_text.id)
+        # --- 修正ポイント：JoinView の引数を正しく渡す ---
+        # パートナー募集は1対1(target_count=1)、締切はとりあえず60分に設定
+        view = JoinView(
+            host_id=it.user.id, 
+            target_count=1, 
+            vc_ch_id=pair_vc.id, 
+            limit_minutes=60, 
+            text_ch_id=pair_text.id
+        )
         
-        await list_ch.send(content=f"💖 新しい出会いの募集です！", embed=embed, view=view)
+        # 募集メッセージ送信
+        list_ch_msg = await list_ch.send(content=f"💖 新しい出会いの募集です！", embed=embed, view=view)
         await it.followup.send(f"募集を投稿し、専用部屋 {pair_text.mention} を作成しました！", ephemeral=True)
+
+        # --- 3. 自動消去ループの開始 (Partner用) ---
+        async def cleanup_partner():
+            import asyncio
+            while view.remaining_seconds > 0:
+                await asyncio.sleep(10)
+                view.remaining_seconds -= 10
+                try: await list_ch_msg.edit()
+                except: break
+
+            try: await list_ch_msg.delete()
+            except: pass
+            
+            # 誰かが参加していなければ部屋を消す（必要に応じて調整）
+            try:
+                if not pair_vc.members:
+                    await pair_vc.delete()
+                    await pair_text.delete()
+            except: pass
+
+        it.client.loop.create_task(cleanup_partner())
+
 bot = MyBot()
 
 # サーバー管理者がパネルを設置するためのコマンド
