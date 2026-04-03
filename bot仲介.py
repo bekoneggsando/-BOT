@@ -425,7 +425,7 @@ class MyBot(commands.Bot):
         self.add_view(UniversalPanelView())
         self.add_view(NetaView())
         self.add_view(NotificationView())
-        # TimeRoleSelectView は「その場出し」なので add_view は不要です
+        self.add_view(PartnerPanelView()) # ←これを追加！
         await self.tree.sync()
         
     # VC自動削除（空になってから60秒後に削除）
