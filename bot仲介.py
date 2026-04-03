@@ -332,9 +332,9 @@ class SleepTimeSelectView(ui.View):
     async def select_start(self, it: discord.Interaction, select: ui.Select):
         user_id = it.user.id
         start_time = int(select.values[0])
-        # 現在の終了設定を取得（なければ0）
-        _, end = user_sleep_settings.get(user_id, (0, 0))
-        user_sleep_settings[user_id] = (start_time, end)
+        # 現在の終了設定を取得（なければ 0）
+        current = user_sleep_settings.get(user_id, (0, 0))
+        user_sleep_settings[user_id] = (start_time, current[1])
         await it.response.send_message(f"✅ **{start_time}時**から通知を止めるようにしました。", ephemeral=True)
 
     @ui.select(
@@ -345,9 +345,9 @@ class SleepTimeSelectView(ui.View):
     async def select_end(self, it: discord.Interaction, select: ui.Select):
         user_id = it.user.id
         end_time = int(select.values[0])
-        # 現在の開始設定を取得（なければ0）
-        start, _ = user_sleep_settings.get(user_id, (0, 0))
-        user_sleep_settings[user_id] = (start, end_time)
+        # 現在の開始設定を取得（なければ 0）
+        current = user_sleep_settings.get(user_id, (0, 0))
+        user_sleep_settings[user_id] = (current[0], end_time)
         await it.response.send_message(f"✅ **{end_time}時**に通知を再開するようにしました。", ephemeral=True)
 
     @ui.button(label="🕒 通知を受け取る時間の設定", style=discord.ButtonStyle.secondary, emoji="⏰", custom_id="open_time_panel")
