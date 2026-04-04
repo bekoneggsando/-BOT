@@ -718,7 +718,7 @@ async def setup(it: discord.Interaction):
 async def setup_panel(it: discord.Interaction):
     embed = discord.Embed(
         title="🚀 募集パネル",
-        description="下のボタンを押して募集を開始してください！\n\n**✨ ネッ友募集**：期限なし・専用チャット作成\n**🎮 ゲーム募集**：自動消去あり（既存の機能）",
+        description="下のボタンを押して募集を開始してください！\n\n**✨ ネッ友募集**：期限なし・専用チャット作成\n**",
         color=0x2f3136
     )
     # 上で作ったボタンViewをセットして送信
