@@ -705,9 +705,8 @@ async def notification_setup(it: discord.Interaction):
 async def setup(it: discord.Interaction):
     await it.response.send_message("募集パネルを設置しました！", view=UniversalPanelView())
 
-@tree.command(name="friend_recruit", description="期限なしのネッ友募集を開始します")
+@bot.tree.command(name="friend_recruit", description="期限なしのネッ友募集を開始します")
 async def friend_recruit(it: discord.Interaction):
-    # ネッ友募集専用のモーダルを呼び出す
     modal = FriendRecruitModal(title="✨ ネッ友・フレンド募集")
     await it.response.send_modal(modal)
 
