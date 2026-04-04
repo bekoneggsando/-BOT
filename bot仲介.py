@@ -645,7 +645,7 @@ class FriendRecruitModal(ui.Modal):
             host_id=it.user.id, 
             target_count=int(self.count_input.value), 
             vc_ch_id=vc_ch.id, 
-            limit_minutes=9999, # 極端に長い時間を入れる
+            limit_minutes=0, # 極端に長い時間を入れる
             text_ch_id=text_ch.id
         )
 
