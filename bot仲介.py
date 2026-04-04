@@ -657,17 +657,13 @@ class FriendRecruitModal(ui.Modal):
 
 class RecruitLaunchView(ui.View):
     def __init__(self):
-        super().__init__(timeout=None) # ずっと消えないようにする
+        super().__init__(timeout=None) 
 
-    # --- 既存のゲーム募集ボタンなどがここにあると想定 ---
-
-    # 追加するネッ友募集ボタン
-    @ui.button(label="✨ ネッ友・フレンド募集", style=discord.ButtonStyle.fuchsia, custom_id="friend_recruit_btn")
+    # styleを「fuchsia」から「primary」(青)に変更しました
+    @ui.button(label="✨ ネッ友・フレンド募集", style=discord.ButtonStyle.primary, custom_id="friend_recruit_btn")
     async def friend_recruit_button(self, it: discord.Interaction, button: ui.Button):
-        # さっき作ったモーダルを呼び出す
         modal = FriendRecruitModal(title="✨ ネッ友・フレンド募集")
         await it.response.send_modal(modal)
-
 
 bot = MyBot()
 
