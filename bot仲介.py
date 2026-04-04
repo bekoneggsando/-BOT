@@ -165,7 +165,6 @@ class MultiRecruitModal(ui.Modal):
         super().__init__(title=title)
         self.mode = mode
         
-        # 全カテゴリー共通の入力項目
         self.count_input = ui.TextInput(label="1. 募集人数 (数字のみ)", placeholder="2", min_length=1, max_length=1)
         self.limit_input = ui.TextInput(label="2. 何分待つ？ (数字のみ・自動締切用)", placeholder="15", min_length=1, max_length=2)
         self.play_time = ui.TextInput(label="3. プレイ終了時間 (目安)", placeholder="23時まで / 2時間 / 未定", max_length=20)
@@ -174,7 +173,6 @@ class MultiRecruitModal(ui.Modal):
         self.add_item(self.limit_input)
         self.add_item(self.play_time)
 
-        # カテゴリーごとの追加項目
         if mode == "valorant":
             self.add_item(ui.TextInput(label="4. 自分のランク", placeholder="ゴールド2", max_length=20))
             self.add_item(ui.TextInput(label="5. その他 (モード・条件・一言)", style=discord.TextStyle.paragraph))
@@ -192,7 +190,6 @@ class MultiRecruitModal(ui.Modal):
             self.add_item(ui.TextInput(label="5. 自己紹介・どんな友達になりたいか", style=discord.TextStyle.paragraph))
 
     async def on_submit(self, it: discord.Interaction):
-        # 1. 入力チェック
         if not self.count_input.value.isdigit() or not self.limit_input.value.isdigit():
             return await it.response.send_message("「人数」と「待機時間」は半角数字で入力してください。", ephemeral=True)
         
@@ -202,18 +199,15 @@ class MultiRecruitModal(ui.Modal):
         await it.response.defer(ephemeral=True)
         guild = it.guild
         
-        # 2. 権限設定
         over = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
         }
 
-        # 3. 部屋作成
         vc_ch = await guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
         text_ch = await guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over) if self.mode == "friend" else None
 
-        # 4. ガチャ投稿
         target_post = text_ch if text_ch else vc_ch
         if self.mode in ["zatsudan", "friend"]:
             await target_post.send(
@@ -222,7 +216,6 @@ class MultiRecruitModal(ui.Modal):
                 view=NetaView()
             )
 
-        # 5. メンション準備（睡眠設定判定）
         role_id = ROLE_IDS.get(self.mode)
         mention_text = ""
         current_time_role_name = "" 
@@ -236,28 +229,12 @@ class MultiRecruitModal(ui.Modal):
 
             if time_role and game_role:
                 current_time_role_name = time_role.name
-                target_mentions = []
-                for m in time_role.members:
-                    if game_role in m.roles:
-                        start, end = user_sleep_settings.get(m.id, (None, None))
-                        is_sleeping = False
-                        if start is not None and end is not None:
-                            if start < end:
-                                if start <= now_hour < end: is_sleeping = True
-                            else:
-                                if now_hour >= start or now_hour < end: is_sleeping = True
-                        if not is_sleeping:
-                            target_mentions.append(m.mention)
-                
+                target_mentions = [m.mention for m in time_role.members if game_role in m.roles]
                 if target_mentions:
-                    header = f"📢 **{current_time_role_name}** の皆さんへ募集です！\n"
-                    mentions = " ".join(target_mentions[:20])
-                    mention_text = f"{header}{mentions}\n"
+                    mention_text = f"📢 **{current_time_role_name}** の皆さんへ募集です！\n{' '.join(target_mentions[:20])}\n"
 
-        # 6. Embed作成（★ここを修正しました！）
+        # --- 表示の修正：ここが「無期限」になるポイント ---
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
-        
-        # フレンド募集なら「無期限」にする判定
         limit_display = "無期限（自動消去なし）" if self.mode == "friend" else f"{limit_minutes}分後に自動消去"
         
         embed = discord.Embed(
@@ -268,16 +245,14 @@ class MultiRecruitModal(ui.Modal):
         embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
         embed.add_field(name="👥 人数", value=f"あと **{target_count}** 人", inline=True)
         embed.add_field(name="⏰ 終了予定", value=self.play_time.value, inline=True)
-        embed.add_field(name="⌛ 締切", value=limit_display, inline=True) # ★ここが limit_display になりました
+        embed.add_field(name="⌛ 締切", value=limit_display, inline=True) # ここを修正
         embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
 
         for item in self.children:
-            label_text = getattr(item, 'label', '')
             if item not in [self.count_input, self.limit_input, self.play_time] and item.value:
-                name_tag = f"🔘 {label_text[3:]}" if len(label_text) > 3 else "🔘 詳細"
-                embed.add_field(name=name_tag, value=item.value, inline=False)
+                label = getattr(item, 'label', '🔘 詳細')
+                embed.add_field(name=f"🔘 {label[3:]}" if len(label) > 3 else label, value=item.value, inline=False)
 
-        # 7. 送信
         target_list_id = LIST_CHANNELS.get(self.mode)
         list_ch = guild.get_channel(target_list_id) if target_list_id else it.channel
         view = JoinView(it.user.id, target_count, vc_ch.id, limit_minutes, text_ch.id if text_ch else None)
@@ -290,13 +265,16 @@ class MultiRecruitModal(ui.Modal):
 
         await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
 
-        # 8. 消去ループ（フレンド募集以外）
+        # --- 消去の修正：friend以外のみ動く ---
         if self.mode != "friend":
             async def cleanup_loop():
                 while view.remaining_seconds > 0:
                     await asyncio.sleep(10)
                     view.remaining_seconds -= 10
-                    try: await list_ch_msg.edit()
+                    try:
+                        m = view.remaining_seconds // 60
+                        embed.set_field_at(2, name="⌛ 締切", value=f"あと {m} 分で自動消去", inline=True)
+                        await list_ch_msg.edit(embed=embed)
                     except: break 
                 try: await list_ch_msg.delete()
                 except: pass
