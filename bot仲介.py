@@ -585,6 +585,77 @@ class PartnerModal(ui.Modal, title="💖 パートナー募集プロフィール
 
         it.client.loop.create_task(cleanup_partner())
 
+class FriendRecruitModal(ui.Modal):
+    def __init__(self, title):
+        super().__init__(title=title)
+        # フレンド募集に必要な項目だけを厳選
+        self.count_input = ui.TextInput(label="1. 募集人数 (数字のみ)", placeholder="2", min_length=1, max_length=1)
+        self.play_time = ui.TextInput(label="2. 活動時間帯の目安", placeholder="夜21時以降 / 休日メイン", max_length=20)
+        self.hobby_input = ui.TextInput(label="3. 趣味・好きなゲーム", placeholder="VALORANT, アニメ, 雑談", max_length=50)
+        self.intro_input = ui.TextInput(label="4. 自己紹介・どんな友達になりたいか", style=discord.TextStyle.paragraph, placeholder="内輪ノリなしで楽しく話せる友達を募集しています！")
+
+        self.add_item(self.count_input)
+        self.add_item(self.play_time)
+        self.add_item(self.hobby_input)
+        self.add_item(self.intro_input)
+
+    async def on_submit(self, it: discord.Interaction):
+        # 人数チェック
+        if not self.count_input.value.isdigit():
+            return await it.response.send_message("人数は数字で入力してください。", ephemeral=True)
+        
+        await it.response.defer(ephemeral=True)
+        
+        # 専用部屋（VCとテキスト両方）を作成
+        over = {
+            it.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
+            it.guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
+        }
+        vc_ch = await it.guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
+        text_ch = await it.guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over)
+
+        # 専用chに固定メッセージを送信
+        await text_ch.send(
+            content=f"✅ {it.user.mention}さんの専用部屋を作成しました！\n内輪ノリなし、初対面歓迎の募集です。話題に困ったら下のガチャを使ってね！",
+            view=NetaView() # 話題ガチャ
+        )
+
+        # 募集カード（Embed）の作成
+        embed = discord.Embed(
+            title="【ネッ友募集】詳細プロフィール",
+            description="✨ **初対面歓迎・ネッ友募集！** ✨\n内輪ノリがないので誰でも入りやすいです。コミュニケーション重視の専用部屋を作りました！",
+            color=0xE91E63 # ピンク色
+        )
+        embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
+        embed.add_field(name="👥 あと何人？", value=f"{self.count_input.value}人", inline=True)
+        embed.add_field(name="⏰ 活動時間", value=self.play_time.value, inline=True)
+        embed.add_field(name="⌛ 締切", value="**無期限（自動消去なし）**", inline=True)
+        embed.add_field(name="🎮 趣味", value=self.hobby_input.value, inline=False)
+        embed.add_field(name="📝 自己紹介", value=self.intro_input.value, inline=False)
+        embed.add_field(name="🔗 専用部屋", value=f"{vc_ch.mention} / {text_ch.mention}", inline=False)
+
+        # 投稿先（friend用のチャンネルIDをここに入れるか、現在のチャンネルに送る）
+        target_ch_id = LIST_CHANNELS.get("friend")
+        target_ch = it.guild.get_channel(target_ch_id) or it.channel
+
+        # ボタンView（参加処理などは既存のJoinViewを使い回す）
+        # limit_minutesを 0 にするか、JoinView側でfriend判定をしていればOK
+        view = JoinView(
+            host_id=it.user.id, 
+            target_count=int(self.count_input.value), 
+            vc_ch_id=vc_ch.id, 
+            limit_minutes=9999, # 極端に長い時間を入れる
+            text_ch_id=text_ch.id
+        )
+
+        await target_ch.send(content=f"📢 {it.user.mention}さんがネッ友を募集しています！", embed=embed, view=view)
+        await it.followup.send(f"ネッ友募集を {target_ch.name} に投稿しました！", ephemeral=True)
+        
+        # ⚠️ ここに cleanup_loop（自動削除）の呼び出しを書かない ⚠️
+        # これにより、このコマンドで作成された募集は絶対に消えません。
+
+
 bot = MyBot()
 
 # サーバー管理者がパネルを設置するためのコマンド
@@ -633,6 +704,12 @@ async def notification_setup(it: discord.Interaction):
 @app_commands.checks.has_permissions(administrator=True)
 async def setup(it: discord.Interaction):
     await it.response.send_message("募集パネルを設置しました！", view=UniversalPanelView())
+
+@tree.command(name="friend_recruit", description="期限なしのネッ友募集を開始します")
+async def friend_recruit(it: discord.Interaction):
+    # ネッ友募集専用のモーダルを呼び出す
+    modal = FriendRecruitModal(title="✨ ネッ友・フレンド募集")
+    await it.response.send_modal(modal)
 
 if __name__ == "__main__":
     if TOKEN: bot.run(TOKEN)
