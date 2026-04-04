@@ -165,7 +165,7 @@ class MultiRecruitModal(ui.Modal):
         super().__init__(title=title)
         self.mode = mode
         
-        # 全カテゴリー共通の「人数」と「時間設定」
+        # 全カテゴリー共通の入力項目
         self.count_input = ui.TextInput(label="1. 募集人数 (数字のみ)", placeholder="2", min_length=1, max_length=1)
         self.limit_input = ui.TextInput(label="2. 何分待つ？ (数字のみ・自動締切用)", placeholder="15", min_length=1, max_length=2)
         self.play_time = ui.TextInput(label="3. プレイ終了時間 (目安)", placeholder="23時まで / 2時間 / 未定", max_length=20)
@@ -174,7 +174,7 @@ class MultiRecruitModal(ui.Modal):
         self.add_item(self.limit_input)
         self.add_item(self.play_time)
 
-        # 残り2枠をカテゴリーごとに最適化
+        # カテゴリーごとの追加項目
         if mode == "valorant":
             self.add_item(ui.TextInput(label="4. 自分のランク", placeholder="ゴールド2", max_length=20))
             self.add_item(ui.TextInput(label="5. その他 (モード・条件・一言)", style=discord.TextStyle.paragraph))
@@ -186,7 +186,7 @@ class MultiRecruitModal(ui.Modal):
             self.add_item(ui.TextInput(label="5. 雰囲気・備考", style=discord.TextStyle.paragraph))
         elif mode == "soudan":
             self.add_item(ui.TextInput(label="4. 相談内容のジャンル", placeholder="仕事 / 人間関係", max_length=50))
-            self.add_item(ui.TextInput(label="5. 接し方の希望 (聞き専 / アドバイス等)", style=discord.TextStyle.paragraph))
+            self.add_item(ui.TextInput(label="5. 接し方の希望", style=discord.TextStyle.paragraph))
         elif mode == "friend":
             self.add_item(ui.TextInput(label="4. 趣味・活動時間帯", placeholder="ゲーム / 夜メイン", max_length=50))
             self.add_item(ui.TextInput(label="5. 自己紹介・どんな友達になりたいか", style=discord.TextStyle.paragraph))
@@ -209,30 +209,27 @@ class MultiRecruitModal(ui.Modal):
             guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
         }
 
-        # 3. 専用部屋（VC/Text）の作成
+        # 3. 部屋作成
         vc_ch = await guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
         text_ch = await guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over) if self.mode == "friend" else None
 
-        # 4. 部屋の中に話題ガチャを投稿
+        # 4. ガチャ投稿
         target_post = text_ch if text_ch else vc_ch
         if self.mode in ["zatsudan", "friend"]:
             await target_post.send(
                 content="✅ 専用部屋を作成しました！\n内輪ノリなし、初対面歓迎の募集です。話題に困ったらガチャを回してね！",
-                embed=discord.Embed(title="🚀 会話サポート", description="「最近のマイブームは？」など、話しやすいお題が出ます。"),
+                embed=discord.Embed(title="🚀 会話サポート", description="「最近のマイブームは？」など話しやすいお題が出ます。"),
                 view=NetaView()
             )
 
-        # 5. メンションの準備（睡眠設定の判定込み）
+        # 5. メンション準備（睡眠設定判定）
         role_id = ROLE_IDS.get(self.mode)
         mention_text = ""
         current_time_role_name = "" 
         
         if role_id:
-            import pytz
-            from datetime import datetime
             jst = pytz.timezone('Asia/Tokyo')
             now_hour = datetime.now(jst).hour
-
             time_role_id = TIME_ROLES.get(now_hour)
             time_role = guild.get_role(time_role_id)
             game_role = guild.get_role(role_id)
@@ -249,7 +246,6 @@ class MultiRecruitModal(ui.Modal):
                                 if start <= now_hour < end: is_sleeping = True
                             else:
                                 if now_hour >= start or now_hour < end: is_sleeping = True
-                        
                         if not is_sleeping:
                             target_mentions.append(m.mention)
                 
@@ -258,8 +254,10 @@ class MultiRecruitModal(ui.Modal):
                     mentions = " ".join(target_mentions[:20])
                     mention_text = f"{header}{mentions}\n"
 
-        # 6. Embed作成（フレンド募集時は「無期限」表示）
+        # 6. Embed作成（★ここを修正しました！）
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
+        
+        # フレンド募集なら「無期限」にする判定
         limit_display = "無期限（自動消去なし）" if self.mode == "friend" else f"{limit_minutes}分後に自動消去"
         
         embed = discord.Embed(
@@ -270,7 +268,7 @@ class MultiRecruitModal(ui.Modal):
         embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
         embed.add_field(name="👥 人数", value=f"あと **{target_count}** 人", inline=True)
         embed.add_field(name="⏰ 終了予定", value=self.play_time.value, inline=True)
-        embed.add_field(name="⌛ 締切", value=limit_display, inline=True)
+        embed.add_field(name="⌛ 締切", value=limit_display, inline=True) # ★ここが limit_display になりました
         embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
 
         for item in self.children:
@@ -279,54 +277,35 @@ class MultiRecruitModal(ui.Modal):
                 name_tag = f"🔘 {label_text[3:]}" if len(label_text) > 3 else "🔘 詳細"
                 embed.add_field(name=name_tag, value=item.value, inline=False)
 
-        # 7. 募集カードの送信
+        # 7. 送信
         target_list_id = LIST_CHANNELS.get(self.mode)
         list_ch = guild.get_channel(target_list_id) if target_list_id else it.channel
-
-        view = JoinView(
-            host_id=it.user.id, 
-            target_count=target_count, 
-            vc_ch_id=vc_ch.id, 
-            limit_minutes=limit_minutes,
-            text_ch_id=text_ch.id if text_ch else None
-        )
+        view = JoinView(it.user.id, target_count, vc_ch.id, limit_minutes, text_ch.id if text_ch else None)
         
-        # 一旦メンション付きで送る（これで通知が飛ぶ）
-        list_ch_msg = await list_ch.send(
-            content=f"{mention_text}📢 {it.user.mention}さんが募集を開始しました！",
-            embed=embed,
-            view=view
-        )
+        list_ch_msg = await list_ch.send(content=f"{mention_text}📢 {it.user.mention}さんが募集を開始しました！", embed=embed, view=view)
 
-        # 送信直後に編集してメンション（個人名）を消す（裏メンション化）
         if mention_text:
-            import asyncio
             await asyncio.sleep(1)
-            clean_content = f"📢 **{current_time_role_name}** の皆さんへ募集が届いています！"
-            await list_ch_msg.edit(content=clean_content)
+            await list_ch_msg.edit(content=f"📢 **{current_time_role_name}** の皆さんへ募集が届いています！")
 
         await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
 
-        # 8. 自動消去ループ（フレンド募集 friend 以外の場合のみ実行）
+        # 8. 消去ループ（フレンド募集以外）
         if self.mode != "friend":
             async def cleanup_loop():
-                import asyncio
                 while view.remaining_seconds > 0:
                     await asyncio.sleep(10)
                     view.remaining_seconds -= 10
                     try: await list_ch_msg.edit()
                     except: break 
-
                 try: await list_ch_msg.delete()
                 except: pass
-                
                 try:
                     await asyncio.sleep(5) 
                     if not vc_ch.members:
                         await vc_ch.delete()
                         if text_ch: await text_ch.delete()
                 except: pass
-
             it.client.loop.create_task(cleanup_loop())
             
 class SleepTimeSelectView(ui.View):
