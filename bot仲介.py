@@ -195,48 +195,38 @@ class MultiRecruitModal(ui.Modal):
         
         target_count = int(self.count_input.value)
         limit_minutes = int(self.limit_input.value)
-        
         await it.response.defer(ephemeral=True)
-        guild = it.guild
-        
+
+        # 1. 部屋作成の共通設定
         over = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            it.guild.default_role: discord.PermissionOverwrite(view_channel=False),
             it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
+            it.guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
         }
-
-        vc_ch = await guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
-        text_ch = await guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over) if self.mode == "friend" else None
-
-        target_post = text_ch if text_ch else vc_ch
-        if self.mode in ["zatsudan", "friend"]:
-            await target_post.send(
-                content="✅ 専用部屋を作成しました！\n内輪ノリなし、初対面歓迎の募集です。話題に困ったらガチャを回してね！",
-                embed=discord.Embed(title="🚀 会話サポート", description="「最近のマイブームは？」など話しやすいお題が出ます。"),
+        
+        # 2. 【分岐】フレンド募集かそれ以外か
+        if self.mode == "friend":
+            # --- ネッ友募集専用：テキストch作成・無期限設定 ---
+            vc_ch = await it.guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
+            text_ch = await it.guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over)
+            
+            # 専用chに挨拶投稿
+            await text_ch.send(
+                content="✅ フレンド募集用チャットを作成しました！\n内輪ノリなし、初対面歓迎です。ゆっくりお話ししてください！",
                 view=NetaView()
             )
+            
+            limit_display = "無期限（自動消去なし）"
+            auto_delete = False  # 削除フラグをオフ
+        else:
+            # --- 通常のゲーム・雑談募集：VCのみ・期限あり ---
+            vc_ch = await it.guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
+            text_ch = None
+            limit_display = f"{limit_minutes}分後に自動消去"
+            auto_delete = True   # 削除フラグをオン
 
-        role_id = ROLE_IDS.get(self.mode)
-        mention_text = ""
-        current_time_role_name = "" 
-        
-        if role_id:
-            jst = pytz.timezone('Asia/Tokyo')
-            now_hour = datetime.now(jst).hour
-            time_role_id = TIME_ROLES.get(now_hour)
-            time_role = guild.get_role(time_role_id)
-            game_role = guild.get_role(role_id)
-
-            if time_role and game_role:
-                current_time_role_name = time_role.name
-                target_mentions = [m.mention for m in time_role.members if game_role in m.roles]
-                if target_mentions:
-                    mention_text = f"📢 **{current_time_role_name}** の皆さんへ募集です！\n{' '.join(target_mentions[:20])}\n"
-
-        # --- 表示の修正：ここが「無期限」になるポイント ---
+        # 3. Embed作成（共通）
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
-        limit_display = "無期限（自動消去なし）" if self.mode == "friend" else f"{limit_minutes}分後に自動消去"
-        
         embed = discord.Embed(
             title=f"【{self.title}】詳細募集", 
             description="✨ **初対面歓迎・ネッ友募集！** ✨\n内輪ノリがないので誰でも入りやすいです。コミュニケーション重視の専用部屋を作りました！",
@@ -245,46 +235,44 @@ class MultiRecruitModal(ui.Modal):
         embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
         embed.add_field(name="👥 人数", value=f"あと **{target_count}** 人", inline=True)
         embed.add_field(name="⏰ 終了予定", value=self.play_time.value, inline=True)
-        embed.add_field(name="⌛ 締切", value=limit_display, inline=True) # ここを修正
+        embed.add_field(name="⌛ 締切", value=limit_display, inline=True)
         embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
 
         for item in self.children:
             if item not in [self.count_input, self.limit_input, self.play_time] and item.value:
-                label = getattr(item, 'label', '🔘 詳細')
-                embed.add_field(name=f"🔘 {label[3:]}" if len(label) > 3 else label, value=item.value, inline=False)
+                embed.add_field(name=f"🔘 {item.label[3:]}" if len(item.label) > 3 else item.label, value=item.value, inline=False)
 
-        target_list_id = LIST_CHANNELS.get(self.mode)
-        list_ch = guild.get_channel(target_list_id) if target_list_id else it.channel
+        # 4. 投稿
+        target_ch = it.guild.get_channel(LIST_CHANNELS.get(self.mode)) or it.channel
         view = JoinView(it.user.id, target_count, vc_ch.id, limit_minutes, text_ch.id if text_ch else None)
-        
-        list_ch_msg = await list_ch.send(content=f"{mention_text}📢 {it.user.mention}さんが募集を開始しました！", embed=embed, view=view)
+        msg = await target_ch.send(embed=embed, view=view)
+        await it.followup.send(f"募集を投稿しました！", ephemeral=True)
 
-        if mention_text:
-            await asyncio.sleep(1)
-            await list_ch_msg.edit(content=f"📢 **{current_time_role_name}** の皆さんへ募集が届いています！")
-
-        await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
-
-        # --- 消去の修正：friend以外のみ動く ---
-        if self.mode != "friend":
-            async def cleanup_loop():
+        # 5. 【重要】自動削除ループを回すかどうかの判定
+        if auto_delete:
+            async def cleanup():
+                # 10秒ごとに残り時間を更新してEmbedを書き換える
                 while view.remaining_seconds > 0:
                     await asyncio.sleep(10)
                     view.remaining_seconds -= 10
                     try:
                         m = view.remaining_seconds // 60
                         embed.set_field_at(2, name="⌛ 締切", value=f"あと {m} 分で自動消去", inline=True)
-                        await list_ch_msg.edit(embed=embed)
-                    except: break 
-                try: await list_ch_msg.delete()
+                        await msg.edit(embed=embed)
+                    except: break
+                
+                # 時間切れで削除
+                try: await msg.delete()
                 except: pass
-                try:
-                    await asyncio.sleep(5) 
-                    if not vc_ch.members:
-                        await vc_ch.delete()
-                        if text_ch: await text_ch.delete()
-                except: pass
-            it.client.loop.create_task(cleanup_loop())
+                
+                # 人がいなければVC削除
+                await asyncio.sleep(5)
+                if not vc_ch.members:
+                    try: await vc_ch.delete()
+                    except: pass
+
+            it.client.loop.create_task(cleanup())
+        # auto_delete が False（friend）の場合は、ここで何もしない（＝消えない）
             
 class SleepTimeSelectView(ui.View):
     def __init__(self):
