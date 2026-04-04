@@ -213,7 +213,7 @@ class MultiRecruitModal(ui.Modal):
         vc_ch = await guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
         text_ch = await guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over) if self.mode == "friend" else None
 
-        # 4. 部屋の中に話題ガチャを投稿（雑談やフレンド募集時）
+        # 4. 部屋の中に話題ガチャを投稿
         target_post = text_ch if text_ch else vc_ch
         if self.mode in ["zatsudan", "friend"]:
             await target_post.send(
@@ -222,7 +222,7 @@ class MultiRecruitModal(ui.Modal):
                 view=NetaView()
             )
 
-        # --- 🕒 修正版：24時間ロールメンション (睡眠設定の判定) ---
+        # 5. メンションの準備（睡眠設定の判定込み）
         role_id = ROLE_IDS.get(self.mode)
         mention_text = ""
         current_time_role_name = "" 
@@ -242,7 +242,6 @@ class MultiRecruitModal(ui.Modal):
                 target_mentions = []
                 for m in time_role.members:
                     if game_role in m.roles:
-                        # ユーザーごとの睡眠設定を取得
                         start, end = user_sleep_settings.get(m.id, (None, None))
                         is_sleeping = False
                         if start is not None and end is not None:
@@ -255,12 +254,11 @@ class MultiRecruitModal(ui.Modal):
                             target_mentions.append(m.mention)
                 
                 if target_mentions:
-                    # メンションを一時的に作成（最大20人）
                     header = f"📢 **{current_time_role_name}** の皆さんへ募集です！\n"
                     mentions = " ".join(target_mentions[:20])
                     mention_text = f"{header}{mentions}\n"
 
-        # 6. Embed作成（フレンド募集時は「無期限」表示に切り替え）
+        # 6. Embed作成（フレンド募集時は「無期限」表示）
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
         limit_display = "無期限（自動消去なし）" if self.mode == "friend" else f"{limit_minutes}分後に自動消去"
         
@@ -276,7 +274,6 @@ class MultiRecruitModal(ui.Modal):
         embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
 
         for item in self.children:
-            # item.labelがあるか確認して、ある場合はスライス[3:]で🔘の後ろを表示
             label_text = getattr(item, 'label', '')
             if item not in [self.count_input, self.limit_input, self.play_time] and item.value:
                 name_tag = f"🔘 {label_text[3:]}" if len(label_text) > 3 else "🔘 詳細"
@@ -294,35 +291,32 @@ class MultiRecruitModal(ui.Modal):
             text_ch_id=text_ch.id if text_ch else None
         )
         
-        # メンション付きで送信（通知を飛ばす）
+        # 一旦メンション付きで送る（これで通知が飛ぶ）
         list_ch_msg = await list_ch.send(
-            content=f"{mention_text}📢 {it.user.mention}さんが新しい募集を開始しました！",
+            content=f"{mention_text}📢 {it.user.mention}さんが募集を開始しました！",
             embed=embed,
             view=view
         )
 
-        # ★ 修正：メンションを裏側（通知のみ）にするため、送信直後に編集してメンションを消す
+        # 送信直後に編集してメンション（個人名）を消す（裏メンション化）
         if mention_text:
             import asyncio
-            await asyncio.sleep(1) # 通知を飛ばすための待機
+            await asyncio.sleep(1)
             clean_content = f"📢 **{current_time_role_name}** の皆さんへ募集が届いています！"
             await list_ch_msg.edit(content=clean_content)
 
         await it.followup.send(f"募集を【 {list_ch.name} 】に投稿しました！", ephemeral=True)
 
-        # 8. 自動消去・延長対応ループ（フレンド募集 friend 以外の場合のみ実行）
+        # 8. 自動消去ループ（フレンド募集 friend 以外の場合のみ実行）
         if self.mode != "friend":
             async def cleanup_loop():
                 import asyncio
                 while view.remaining_seconds > 0:
                     await asyncio.sleep(10)
                     view.remaining_seconds -= 10
-                    try:
-                        await list_ch_msg.edit() # 生存確認
-                    except:
-                        break 
+                    try: await list_ch_msg.edit()
+                    except: break 
 
-                # 実際の消去処理
                 try: await list_ch_msg.delete()
                 except: pass
                 
@@ -334,6 +328,7 @@ class MultiRecruitModal(ui.Modal):
                 except: pass
 
             it.client.loop.create_task(cleanup_loop())
+            
 class SleepTimeSelectView(ui.View):
     def __init__(self):
         super().__init__(timeout=None)
