@@ -165,33 +165,39 @@ class MultiRecruitModal(ui.Modal):
         super().__init__(title=title)
         self.mode = mode
         
-        # 共通の基本入力
-        self.count_input = ui.TextInput(label="1. 募集人数 (数字のみ)", placeholder="2", min_length=1, max_length=1)
-        self.play_time = ui.TextInput(label="2. いつまで遊ぶ？", placeholder="23時まで / 2試合 / 未定", max_length=20)
-        self.limit_input = ui.TextInput(label="3. 締切までの時間 (分)", placeholder="15", min_length=1, max_length=2)
+        # 1. 募集人数
+        self.count_input = ui.TextInput(
+            label="1. 募集人数 (数字のみ)", 
+            placeholder="2", 
+            min_length=1, max_length=1
+        )
+        # 2. 締切時間（復活！）
+        self.limit_input = ui.TextInput(
+            label="2. 締切までの時間 (分)", 
+            placeholder="15", 
+            min_length=1, max_length=2
+        )
         
         self.add_item(self.count_input)
-        self.add_item(self.play_time)
         self.add_item(self.limit_input)
 
         # モード別の詳細入力
         if mode == "valorant":
-            self.rank_input = ui.TextInput(label="4. 自分のランク", placeholder="ゴールド1", max_length=15)
-            self.match_mode = ui.TextInput(label="5. 募集モード", placeholder="コンペ / アンレート / スイフト", max_length=15)
-            self.memo_input = ui.TextInput(label="6. 条件・一言", placeholder="シルバー〜プラチナまで / 楽しく！", style=discord.TextStyle.paragraph, required=False)
+            self.rank_input = ui.TextInput(label="3. 自分のランク", placeholder="ゴールド1", max_length=15)
+            self.match_mode = ui.TextInput(label="4. 募集モード", placeholder="コンペ / アンレート", max_length=15)
+            self.memo_input = ui.TextInput(label="5. 条件・一言", placeholder="シルバー〜プラチナまで / 楽しく！", style=discord.TextStyle.paragraph, required=False)
             self.add_item(self.rank_input)
             self.add_item(self.match_mode)
             self.add_item(self.memo_input)
         elif mode == "apex":
-            self.rank_input = ui.TextInput(label="4. ランク / Lv", placeholder="プラチナ", max_length=20)
-            self.match_mode = ui.TextInput(label="5. モード", placeholder="カジュアル / ランク上げ", max_length=20)
-            self.memo_input = ui.TextInput(label="6. スタイル・備考", style=discord.TextStyle.paragraph, required=False)
+            self.rank_input = ui.TextInput(label="3. ランク / Lv", placeholder="プラチナ", max_length=20)
+            self.match_mode = ui.TextInput(label="4. モード", placeholder="カジュアル / ランク上げ", max_length=20)
+            self.memo_input = ui.TextInput(label="5. スタイル・備考", style=discord.TextStyle.paragraph, required=False)
             self.add_item(self.rank_input)
             self.add_item(self.match_mode)
             self.add_item(self.memo_input)
         else:
-            # 雑談・相談などの汎用項目
-            self.memo_input = ui.TextInput(label="4. 内容・一言", style=discord.TextStyle.paragraph)
+            self.memo_input = ui.TextInput(label="3. 内容・一言", style=discord.TextStyle.paragraph)
             self.add_item(self.memo_input)
 
     async def on_submit(self, it: discord.Interaction):
@@ -212,25 +218,24 @@ class MultiRecruitModal(ui.Modal):
         vc_ch = await it.guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
         limit_display = f"{limit_minutes}分後に自動消去"
 
-        # 2. Embed作成
+       # 2. Embed作成
         colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6}
         embed = discord.Embed(
             title=f"【{self.title}】参加者募集中", 
-            description="🎮 **一緒にプレイできる方を募集中！**\n内輪ノリなし・初対面歓迎です。お気軽にどうぞ！",
+            description="🎮 **一緒にプレイできる方を募集中！**",
             color=colors.get(self.mode, 0x95a5a6)
         )
         embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
 
-        # モードに応じた表示の切り替え
         if self.mode in ["valorant", "apex"]:
-            # 最重要情報を1段目に
+            # 最重要情報
             embed.add_field(name="⚖️ モード", value=f"**{self.match_mode.value}**", inline=True)
             embed.add_field(name="🏅 ランク", value=f"**{self.rank_input.value}**", inline=True)
             embed.add_field(name="👥 あと", value=f"**{target_count}** 人", inline=True)
-            # 補足情報を2段目に
-            embed.add_field(name="⏰ 終了目安", value=self.play_time.value, inline=True)
+            # 2段目（「いつまで」を消して、締切とVCだけに整理）
             embed.add_field(name="⌛ 締切", value=limit_display, inline=True)
             embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
+            
             if self.memo_input.value:
                 embed.add_field(name="📝 条件・一言", value=f"```\n{self.memo_input.value}\n```", inline=False)
         else:
