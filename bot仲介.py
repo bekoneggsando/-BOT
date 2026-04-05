@@ -265,10 +265,16 @@ class MultiRecruitModal(ui.Modal):
                 try: await msg.delete()
                 except: pass
                 
-                # 人がいなければVC削除
-                await asyncio.sleep(5)
-                if not vc_ch.members:
-                    try: await vc_ch.delete()
+                # VCの掃除
+            await asyncio.sleep(5)
+            if not vc_ch.members:
+                try: 
+                    await vc_ch.delete()
+                    if text_ch: await text_ch.delete()
+                except: # ← ここが抜けていました！
+                    pass
+
+        it.client.loop.create_task(cleanup())
         # auto_delete が False（friend）の場合は、ここで何もしない（＝消えない）
             
 class SleepTimeSelectView(ui.View):
