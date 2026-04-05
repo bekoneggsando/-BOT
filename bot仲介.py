@@ -225,12 +225,12 @@ class MultiRecruitModal(ui.Modal):
             limit_display = f"{limit_minutes}分後に自動消去"
             auto_delete = True   # 削除フラグをオン
 
-        # 3. Embed作成（共通）
-        colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
-        embed = discord.Embed(
-            title=f"【{self.title}】詳細募集", 
-            description="✨ **初対面歓迎・ネッ友募集！** ✨\n内輪ノリがないので誰でも入りやすいです。コミュニケーション重視の専用部屋を作りました！",
-            color=colors.get(self.mode, 0x95a5a6)
+            # 3. Embed作成（共通）
+            colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
+            embed = discord.Embed(
+                title=f"【{self.title}】詳細募集", 
+                description="✨ **初対面歓迎・ネッ友募集！** ✨\n内輪ノリがないので誰でも入りやすいです。コミュニケーション重視の専用部屋を作りました！",
+                color=colors.get(self.mode, 0x95a5a6)
         )
         embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
         embed.add_field(name="👥 人数", value=f"あと **{target_count}** 人", inline=True)
@@ -269,9 +269,6 @@ class MultiRecruitModal(ui.Modal):
                 await asyncio.sleep(5)
                 if not vc_ch.members:
                     try: await vc_ch.delete()
-                    except: pass
-
-            it.client.loop.create_task(cleanup())
         # auto_delete が False（friend）の場合は、ここで何もしない（＝消えない）
             
 class SleepTimeSelectView(ui.View):
