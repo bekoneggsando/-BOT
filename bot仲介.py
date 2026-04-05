@@ -165,31 +165,37 @@ class MultiRecruitModal(ui.Modal):
         super().__init__(title=title)
         self.mode = mode
         
+        # 共通の基本入力
         self.count_input = ui.TextInput(label="1. 募集人数 (数字のみ)", placeholder="2", min_length=1, max_length=1)
-        self.limit_input = ui.TextInput(label="2. 何分待つ？ (数字のみ・自動締切用)", placeholder="15", min_length=1, max_length=2)
-        self.play_time = ui.TextInput(label="3. プレイ終了時間 (目安)", placeholder="23時まで / 2時間 / 未定", max_length=20)
+        self.play_time = ui.TextInput(label="2. いつまで遊ぶ？", placeholder="23時まで / 2試合 / 未定", max_length=20)
+        self.limit_input = ui.TextInput(label="3. 締切までの時間 (分)", placeholder="15", min_length=1, max_length=2)
         
         self.add_item(self.count_input)
-        self.add_item(self.limit_input)
         self.add_item(self.play_time)
+        self.add_item(self.limit_input)
 
+        # モード別の詳細入力
         if mode == "valorant":
-            self.add_item(ui.TextInput(label="4. 自分のランク", placeholder="ゴールド2", max_length=20))
-            self.add_item(ui.TextInput(label="5. その他 (モード・条件・一言)", style=discord.TextStyle.paragraph))
+            self.rank_input = ui.TextInput(label="4. 自分のランク", placeholder="ゴールド1", max_length=15)
+            self.match_mode = ui.TextInput(label="5. 募集モード", placeholder="コンペ / アンレート / スイフト", max_length=15)
+            self.memo_input = ui.TextInput(label="6. 条件・一言", placeholder="シルバー〜プラチナまで / 楽しく！", style=discord.TextStyle.paragraph, required=False)
+            self.add_item(self.rank_input)
+            self.add_item(self.match_mode)
+            self.add_item(self.memo_input)
         elif mode == "apex":
-            self.add_item(ui.TextInput(label="4. ランク / Lv", placeholder="プラチナ", max_length=20))
-            self.add_item(ui.TextInput(label="5. その他 (モード・条件・スタイル)", style=discord.TextStyle.paragraph))
-        elif mode == "zatsudan":
-            self.add_item(ui.TextInput(label="4. 今の話題", placeholder="アニメの話 / 雑談", max_length=50))
-            self.add_item(ui.TextInput(label="5. 雰囲気・備考", style=discord.TextStyle.paragraph))
-        elif mode == "soudan":
-            self.add_item(ui.TextInput(label="4. 相談内容のジャンル", placeholder="仕事 / 人間関係", max_length=50))
-            self.add_item(ui.TextInput(label="5. 接し方の希望", style=discord.TextStyle.paragraph))
-        elif mode == "friend":
-            self.add_item(ui.TextInput(label="4. 趣味・活動時間帯", placeholder="ゲーム / 夜メイン", max_length=50))
-            self.add_item(ui.TextInput(label="5. 自己紹介・どんな友達になりたいか", style=discord.TextStyle.paragraph))
+            self.rank_input = ui.TextInput(label="4. ランク / Lv", placeholder="プラチナ", max_length=20)
+            self.match_mode = ui.TextInput(label="5. モード", placeholder="カジュアル / ランク上げ", max_length=20)
+            self.memo_input = ui.TextInput(label="6. スタイル・備考", style=discord.TextStyle.paragraph, required=False)
+            self.add_item(self.rank_input)
+            self.add_item(self.match_mode)
+            self.add_item(self.memo_input)
+        else:
+            # 雑談・相談などの汎用項目
+            self.memo_input = ui.TextInput(label="4. 内容・一言", style=discord.TextStyle.paragraph)
+            self.add_item(self.memo_input)
 
     async def on_submit(self, it: discord.Interaction):
+        # 入力チェック
         if not self.count_input.value.isdigit() or not self.limit_input.value.isdigit():
             return await it.response.send_message("「人数」と「待機時間」は半角数字で入力してください。", ephemeral=True)
         
@@ -197,85 +203,74 @@ class MultiRecruitModal(ui.Modal):
         limit_minutes = int(self.limit_input.value)
         await it.response.defer(ephemeral=True)
 
-        # 1. 部屋作成の共通設定
+        # 1. 部屋作成
         over = {
             it.guild.default_role: discord.PermissionOverwrite(view_channel=False),
             it.user: discord.PermissionOverwrite(view_channel=True, connect=True, send_messages=True),
             it.guild.me: discord.PermissionOverwrite(view_channel=True, manage_channels=True)
         }
-        
-        # 2. 【分岐】フレンド募集かそれ以外か
-        if self.mode == "friend":
-            # --- ネッ友募集専用：テキストch作成・無期限設定 ---
-            vc_ch = await it.guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
-            text_ch = await it.guild.create_text_channel(name=f"💬-{it.user.display_name}専用ch", overwrites=over)
-            
-            # 専用chに挨拶投稿
-            await text_ch.send(
-                content="✅ フレンド募集用チャットを作成しました！\n内輪ノリなし、初対面歓迎です。ゆっくりお話ししてください！",
-                view=NetaView()
-            )
-            
-            limit_display = "無期限（自動消去なし）"
-            auto_delete = False  # 削除フラグをオフ
-        else:
-            # --- 通常のゲーム・雑談募集：VCのみ・期限あり ---
-            vc_ch = await it.guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
-            text_ch = None
-            limit_display = f"{limit_minutes}分後に自動消去"
-            auto_delete = True   # 削除フラグをオン
+        vc_ch = await it.guild.create_voice_channel(name=f"🔊-{it.user.display_name}の部屋", overwrites=over)
+        limit_display = f"{limit_minutes}分後に自動消去"
 
-            # 3. Embed作成（共通）
-            colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6, "friend": 0xE91E63}
-            embed = discord.Embed(
-                title=f"【{self.title}】詳細募集", 
-                description="✨ **初対面歓迎・ネッ友募集！** ✨\n内輪ノリがないので誰でも入りやすいです。コミュニケーション重視の専用部屋を作りました！",
-                color=colors.get(self.mode, 0x95a5a6)
+        # 2. Embed作成
+        colors = {"valorant": 0xFF4654, "apex": 0xFF0000, "zatsudan": 0x5865F2, "soudan": 0x9B59B6}
+        embed = discord.Embed(
+            title=f"【{self.title}】参加者募集中", 
+            description="🎮 **一緒にプレイできる方を募集中！**\n内輪ノリなし・初対面歓迎です。お気軽にどうぞ！",
+            color=colors.get(self.mode, 0x95a5a6)
         )
         embed.set_author(name=it.user.display_name, icon_url=it.user.display_avatar.url)
-        embed.add_field(name="👥 人数", value=f"あと **{target_count}** 人", inline=True)
-        embed.add_field(name="⏰ 終了予定", value=self.play_time.value, inline=True)
-        embed.add_field(name="⌛ 締切", value=limit_display, inline=True)
-        embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
 
-        for item in self.children:
-            if item not in [self.count_input, self.limit_input, self.play_time] and item.value:
-                embed.add_field(name=f"🔘 {item.label[3:]}" if len(item.label) > 3 else item.label, value=item.value, inline=False)
+        # モードに応じた表示の切り替え
+        if self.mode in ["valorant", "apex"]:
+            # 最重要情報を1段目に
+            embed.add_field(name="⚖️ モード", value=f"**{self.match_mode.value}**", inline=True)
+            embed.add_field(name="🏅 ランク", value=f"**{self.rank_input.value}**", inline=True)
+            embed.add_field(name="👥 あと", value=f"**{target_count}** 人", inline=True)
+            # 補足情報を2段目に
+            embed.add_field(name="⏰ 終了目安", value=self.play_time.value, inline=True)
+            embed.add_field(name="⌛ 締切", value=limit_display, inline=True)
+            embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=True)
+            if self.memo_input.value:
+                embed.add_field(name="📝 条件・一言", value=f"```\n{self.memo_input.value}\n```", inline=False)
+        else:
+            # 雑談等の汎用表示
+            embed.add_field(name="👥 人数", value=f"あと {target_count} 人", inline=True)
+            embed.add_field(name="⏰ 終了目安", value=self.play_time.value, inline=True)
+            embed.add_field(name="⌛ 締切", value=limit_display, inline=True)
+            embed.add_field(name="🔗 専用部屋", value=vc_ch.mention, inline=False)
+            if self.memo_input.value:
+                embed.add_field(name="💬 内容", value=self.memo_input.value, inline=False)
 
-        # 4. 投稿
-        target_ch = it.guild.get_channel(LIST_CHANNELS.get(self.mode)) or it.channel
-        view = JoinView(it.user.id, target_count, vc_ch.id, limit_minutes, text_ch.id if text_ch else None)
+        # 3. 投稿
+        target_ch_id = LIST_CHANNELS.get(self.mode)
+        target_ch = it.guild.get_channel(target_ch_id) or it.channel
+        view = JoinView(it.user.id, target_count, vc_ch.id, limit_minutes, None)
         msg = await target_ch.send(embed=embed, view=view)
         await it.followup.send(f"募集を投稿しました！", ephemeral=True)
 
-        # 5. 【重要】自動削除ループを回すかどうかの判定
-        if auto_delete:
-            async def cleanup():
-                # 10秒ごとに残り時間を更新してEmbedを書き換える
-                while view.remaining_seconds > 0:
-                    await asyncio.sleep(10)
-                    view.remaining_seconds -= 10
-                    try:
-                        m = view.remaining_seconds // 60
-                        embed.set_field_at(2, name="⌛ 締切", value=f"あと {m} 分で自動消去", inline=True)
-                        await msg.edit(embed=embed)
-                    except: break
-                
-                # 時間切れで削除
-                try: await msg.delete()
-                except: pass
-                
-                # VCの掃除
+        # 4. 自動削除ループ
+        async def cleanup():
+            import asyncio
+            while view.remaining_seconds > 0:
+                await asyncio.sleep(10)
+                view.remaining_seconds -= 10
+                try:
+                    m = view.remaining_seconds // 60
+                    embed.set_field_at(4 if self.mode in ["valorant", "apex"] else 2, 
+                                       name="⌛ 締切", value=f"あと {m} 分で自動消去", inline=True)
+                    await msg.edit(embed=embed)
+                except: break
+            
+            try: await msg.delete()
+            except: pass
+            
             await asyncio.sleep(5)
             if not vc_ch.members:
-                try: 
-                    await vc_ch.delete()
-                    if text_ch: await text_ch.delete()
-                except: # ← ここが抜けていました！
-                    pass
+                try: await vc_ch.delete()
+                except: pass
 
         it.client.loop.create_task(cleanup())
-        # auto_delete が False（friend）の場合は、ここで何もしない（＝消えない）
             
 class SleepTimeSelectView(ui.View):
     def __init__(self):
